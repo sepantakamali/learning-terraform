@@ -1,0 +1,26 @@
+#cloud-config
+
+package_update: true
+
+packages:
+  - docker.io
+
+write_files:
+  - path: /opt/learning-app/index.html
+    permissions: '0644'
+    content: |
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <title>Learning Terraform</title>
+        </head>
+        <body>
+          <h1>My Terraform learning project</h1>
+          <p>Ubuntu, Docker, and Nginx configured with cloud-init.</p>
+        </body>
+      </html>
+
+runcmd:
+  - systemctl enable --now docker
+  - docker run -d --name learning-web --restart unless-stopped -p 80:80 -v /opt/learning-app:/usr/share/nginx/html:ro nginx:stable-alpine
