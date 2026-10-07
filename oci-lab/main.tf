@@ -35,6 +35,6 @@ variable "ssh_public_key_path" {
 }
 
 variable "ubuntu_image_id" {
-  description = "OCID of the Ubuntu ARM image used for the learning VM"
+  description = "OCID of the Ubuntu image used for the learning VM"
   type        = string
 }
