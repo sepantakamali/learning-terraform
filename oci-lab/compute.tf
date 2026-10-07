@@ -19,7 +19,7 @@ module "web_server" {
   cloud_init          = file("${path.module}/cloud-init.yaml")
 
   tags = {
-    environment="learning"
+    environment = "learning"
     managed_by  = "terraform"
   }
 }
