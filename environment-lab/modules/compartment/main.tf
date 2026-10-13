@@ -16,9 +16,9 @@ variable "environment" {
 
 resource "oci_identity_compartment" "compartment" {
   compartment_id = var.parent_compartment_id
-  name = "learning-env-${var.environment}"
-  description = "Terraform-managed ${var.environment} environment"
-  enable_delete = true
+  name           = "learning-env-${var.environment}"
+  description    = "Terraform-managed ${var.environment} environment"
+  enable_delete  = true
 }
 
 output "compartment_id" {
