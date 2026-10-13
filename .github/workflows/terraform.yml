@@ -10,10 +10,6 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-  
-    defaults:
-      run:
-        working-directory: oci-lab
 
     steps:
       - name: Check out repository
@@ -29,7 +25,13 @@ jobs:
         run: terraform fmt -check -diff -recursive
  
       - name: Initialise providers and modules
-        run: terraform init -backend=false -input=false
+        run: |
+          terraform -chdir=oci-lab init -backend=false -input=false
+          terraform -chdir=environment-lab/dev init -backend=false -input=false
+          terraform -chdir=environment-lab/prod init -backend=false -input=false
 
       - name: Validate configuration
-        run: terraform validate  
+        run: |
+          terraform -chdir=oci-lab validate
+          terraform -chdir=environment-lab/dev validate
+          terraform -chdir=environment-lab/prod validate
