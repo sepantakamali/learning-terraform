@@ -35,3 +35,9 @@ jobs:
           terraform -chdir=oci-lab validate
           terraform -chdir=environment-lab/dev validate
           terraform -chdir=environment-lab/prod validate
+
+      - name: Initialise compartment module for tests
+        run: terraform -chdir=environment-lab/modules/compartment init -backend=false -input=false
+
+      - name: Test compartment module
+        run: terraform -chdir=environment-lab/modules/compartment test
