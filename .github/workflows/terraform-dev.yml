@@ -66,10 +66,114 @@ jobs:
       - name: Plan development changes
         run: |
           OCI_config_file_profile="$OCI_CONFIG_FILE_PROFILE" \
-            terraform plan -input=false -lock-timeout=60s -no-color
+            terraform plan -input=false -lock-timeout=60s -no-color \
+            -out=dev.tfplan
 
-      - name: Remove OCI credentials
+     - name: Encrypt saved plan
+       env:
+         TF_PLAN_PASSWORD: ${{ secrets.TF_PLAN_PASSWORD }}
+       run: |
+         umask 077
+         test -n "$TF_PLAN_PASSWORD"
+         printf '%s\n' "$TF_PLAN_PASSWORD" |
+           gpg --batch --yes --pinentry-mode loopback \
+             --passphrase-fd 0 \
+             --symmetric --cipher-algo AES256 \
+             --output dev.tfplan.gpg dev.tfplan
+         rm -f dev.tfplan
+
+     - name: Upload encrypted plan
+       uses: actions/upload-artifact@v7
+       with:
+         name: development-plan-${{ github.run_attempt }}
+         path: environment-lab/dev/dev.tfplan.gpg
+         if-no-files-found: error
+         retention-days: 3
+
+     - name: Remove OCI credentials and temporary plans
+       if: always()
+       run: |
+          rm -f "$HOME/.oci/github_terraform_dev.pem"
+          rm -f "$HOME/.oci/config"
+          rm -f dev.tfplan dev.tfplan.gpg
+
+  apply:
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: development
+
+    env:
+      OCI_CONFIG_FILE_PROFILE: GITHUB_TERRAFORM_DEV
+
+    defaults:
+      run:
+        working-directory: environment-lab/dev
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+
+      - name: Configure OCI credentials
+        env:
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_USER_OCID: ${{ vars.OCI_USER_OCID }}
+          OCI_TENANCY_OCID: ${{ vars.OCI_TENANCY_OCID }}
+          OCI_FINGERPRINT: ${{ vars.OCI_FINGERPRINT }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.oci"
+          printf '%s\n' "$OCI_PRIVATE_KEY" > "$HOME/.oci/github_terraform_dev.pem"
+
+          cat > "$HOME/.oci/config" <<EOF
+          [GITHUB_TERRAFORM_DEV]
+          user=$OCI_USER_OCID
+          tenancy=$OCI_TENANCY_OCID
+          fingerprint=$OCI_FINGERPRINT
+          region=$OCI_REGION
+          key_file=$HOME/.oci/github_terraform_dev.pem
+          EOF
+
+      - name: Initialise Terraform
+        run: |
+          OCI_config_file_profile="$OCI_CONFIG_FILE_PROFILE" \
+            terraform init -input=false -lockfile=readonly
+
+      - name: Download encrypted plan
+        uses: actions/download-artifact@v8
+        with:
+          name: development-plan-${{ github.run_attempt }}
+          path: environment-lab/dev
+
+      - name: Decrypt saved plan
+        env:
+          TF_PLAN_PASSWORD: ${{ secrets.TF_PLAN_PASSWORD }}
+        run: |
+          umask 077
+          test -n "$TF_PLAN_PASSWORD"
+          printf '%s\n' "$TF_PLAN_PASSWORD" |
+            gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 \
+              --output dev.tfplan --decrypt dev.tfplan.gpg
+
+      - name: Apply approved plan
+        run: |
+          OCI_config_file_profile="$OCI_CONFIG_FILE_PROFILE" \
+            terraform apply -input=false -lock-timeout=60s -no-color dev.tfplan
+
+      - name: Remove OCI credentials and temporary plans
         if: always()
         run: |
           rm -f "$HOME/.oci/github_terraform_dev.pem"
           rm -f "$HOME/.oci/config"
+          rm -f dev.tfplan dev.tfplan.gpg
