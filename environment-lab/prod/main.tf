@@ -22,7 +22,7 @@ provider "oci" {
 module "compartment" {
   source = "../modules/compartment"
 
-  parent_compartment_id = "ocid1.compartment.oc1..aaaaaaaaqyvhurpus35zpk2w4luact3d3umrd7xnnrtsabnjoufyeedlfcca"
+  parent_compartment_id = data.terraform_remote_state.foundation.outputs.oci_lab_compartment_id
   environment           = "prod"
 }
 

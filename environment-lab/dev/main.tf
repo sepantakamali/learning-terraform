@@ -7,23 +7,29 @@ terraform {
   }
 
   backend "oci" {
-    bucket              = "learning-terraform-state"
-    namespace           = "lrzw2bsg0uek"
-    key                 = "environment-lab/dev/terraform.tfstate"
-    region              = "uk-london-1"
-    config_file_profile = "LEARNING_TERRAFORM"
+    bucket    = "learning-terraform-state"
+    namespace = "lrzw2bsg0uek"
+    key       = "environment-lab/dev/terraform.tfstate"
+    region    = "uk-london-1"
   }
 }
 
+provider "oci" {}
+
 provider "oci" {
-  config_file_profile = "LEARNING_TERRAFORM"
+  alias  = "london"
+  region = "uk-london-1"
 }
 
 module "compartment" {
   source = "../modules/compartment"
 
-  parent_compartment_id = "ocid1.compartment.oc1..aaaaaaaaqyvhurpus35zpk2w4luact3d3umrd7xnnrtsabnjoufyeedlfcca"
+  parent_compartment_id = data.terraform_remote_state.foundation.outputs.oci_lab_compartment_id
   environment           = "dev"
+
+  providers = {
+    oci = oci.london
+  }
 }
 
 output "compartment_id" {

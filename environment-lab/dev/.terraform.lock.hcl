@@ -2,23 +2,23 @@
 # Manual edits may be lost in future updates.
 
 provider "registry.terraform.io/oracle/oci" {
-  version     = "9.9.0"
+  version     = "9.10.0"
   constraints = "~> 9.2"
   hashes = [
-    "h1:tqzuGbvp5ed7n9hXe4xkDA8jtPIQ8fRZvEOFahvvfz4=",
-    "zh:11ada80e0683727167016552fd7af462a9d9c4353ba9dbbf44baaa947ad21f5e",
-    "zh:19ddc0ffa1d608a168e223bc1cf833d23a030886b4b5b57cdca69b91c9db2fdb",
-    "zh:304aca2f95a99dcc93dde2df08dc1fddcd85a02a6861bcc1d65180c2a7c2b2ec",
-    "zh:3d1377cbbb500c6c89afd8a0238410f9ca018bbd7e2b5c81fca4ef91318cdc66",
-    "zh:635d424d2e9fe2594eb5491f5acb2ec73e5c5de16dbb443dbf9ee214de41bfb6",
-    "zh:80691911b40ef088c0c6aede8da7535473336c6090c8904f1cad92022cf33019",
+    "h1:NzYE29AfXQS2iwnDRgoJ31G4wFp2cvkDf8Br0VE8Ldk=",
+    "zh:42a17aec229e3aa2c144b32b4bfba25d3b05bce7e5969db0b9fbca5720600797",
+    "zh:49a9a8ff0ab5584a560437d277400be1de7244619cbfc8aae7bda677b6a8d8ac",
+    "zh:53d9b35e4291450c47aaf6037dcabd1221767acca137a8d61400d407cc2d8421",
+    "zh:555ad9ae2b295bb7bc8afc908408f0a67073fe60ed0e7d09cceb2709aa44ccc1",
+    "zh:5fbc25c63c8a82e9f5a264134fdea1acde9d1e09168afa407c6f43a42211da1d",
+    "zh:6ccc4d35bad99554cb9fc0e6e9bb0c971cf6721290758f92d52cfc1953741eab",
+    "zh:7235f52abc9d0264acd75a72139059c910fa21e201c452ca2a66beca446748bd",
+    "zh:74a0d1d0d1bdc968be61e9347af27a7e366ee3308cad23b2e328f51353ff7142",
+    "zh:74a8f0cb4e6e4290664856555897e6ce9fc99f8501356cfa97bb482537d6d9b9",
+    "zh:7b0a28b7133c8a6e9963c1db1b6be65dfbfe9b472f3b29d59b7d3eba704b78d9",
     "zh:9b12af85486a96aedd8d7984b0ff811a4b42e3d88dad1a3fb4c0b580d04fa425",
-    "zh:ab62d904e891fe0b605969a0b5d8ce88fce3c284d40268b935a437073700ece9",
-    "zh:b284462d72ab352bc6c319336edcd85ede731fcb9c87e5f46de7989f6efad6aa",
-    "zh:c1186a474b6cb19695d04f074a14ee2d69cd3dfca064e316744f6dc7f7cea0ee",
-    "zh:d3f897d4e9f2bd26b6c6272b1ef37485dc71f3b34e46ab685456bb65915057e6",
-    "zh:d42efae214df59b61bfb22ce3a0391e59463aa5b0913328148e31b43a9e9ac24",
-    "zh:ef721f61023b26284aeb8d80ce174918efe1fb2e4ba664347830f0edabe86271",
-    "zh:feddcef24e7e7ff527d7d07c84676af1f6e2a7bbaa924f3a5151db879ba4a0c0",
+    "zh:a3fd3f99c7c9338ef162e01582b7aa91830ae3366a59b41f493fa507dc06c007",
+    "zh:ca2c2a5805cc013ffda41e9d9cc4501fb30c93e7c000c242bcae987a667bc5eb",
+    "zh:f693ab0333744b52342d9f31e0a0f628f57df62e45920313ec39d7caa0e1b082",
   ]
 }
