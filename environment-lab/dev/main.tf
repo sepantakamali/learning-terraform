@@ -30,6 +30,9 @@ module "compartment" {
   providers = {
     oci = oci.london
   }
+
+  description = "Development compartment deployed through approved GitHub Actions"
+
 }
 
 output "compartment_id" {
