@@ -69,33 +69,33 @@ jobs:
             terraform plan -input=false -lock-timeout=60s -no-color \
             -out=dev.tfplan
 
-     - name: Encrypt saved plan
-       env:
-         TF_PLAN_PASSWORD: ${{ secrets.TF_PLAN_PASSWORD }}
-       run: |
-         umask 077
-         test -n "$TF_PLAN_PASSWORD"
-         printf '%s\n' "$TF_PLAN_PASSWORD" |
-           gpg --batch --yes --pinentry-mode loopback \
-             --passphrase-fd 0 \
-             --symmetric --cipher-algo AES256 \
-             --output dev.tfplan.gpg dev.tfplan
-         rm -f dev.tfplan
+      - name: Encrypt saved plan
+        env:
+          TF_PLAN_PASSWORD: ${{ secrets.TF_PLAN_PASSWORD }}
+        run: |
+          umask 077
+          test -n "$TF_PLAN_PASSWORD"
+          printf '%s\n' "$TF_PLAN_PASSWORD" |
+            gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 \
+              --symmetric --cipher-algo AES256 \
+              --output dev.tfplan.gpg dev.tfplan
+          rm -f dev.tfplan
 
-     - name: Upload encrypted plan
-       uses: actions/upload-artifact@v7
-       with:
-         name: development-plan-${{ github.run_attempt }}
-         path: environment-lab/dev/dev.tfplan.gpg
-         if-no-files-found: error
-         retention-days: 3
+      - name: Upload encrypted plan
+        uses: actions/upload-artifact@v7
+        with:
+          name: development-plan-${{ github.run_attempt }}
+          path: environment-lab/dev/dev.tfplan.gpg
+          if-no-files-found: error
+          retention-days: 3
 
-     - name: Remove OCI credentials and temporary plans
-       if: always()
-       run: |
-          rm -f "$HOME/.oci/github_terraform_dev.pem"
-          rm -f "$HOME/.oci/config"
-          rm -f dev.tfplan dev.tfplan.gpg
+      - name: Remove OCI credentials and temporary plans
+        if: always()
+        run: |
+           rm -f "$HOME/.oci/github_terraform_dev.pem"
+           rm -f "$HOME/.oci/config"
+           rm -f dev.tfplan dev.tfplan.gpg
 
   apply:
     needs: plan
