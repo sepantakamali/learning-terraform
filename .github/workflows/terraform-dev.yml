@@ -17,7 +17,6 @@ jobs:
     environment: development
     env:
       OCI_CONFIG_FILE_PROFILE: GITHUB_TERRAFORM_DEV
-      OCI_config_file_profile: GITHUB_TERRAFORM_DEV
 
     defaults:
       run:
@@ -57,13 +56,17 @@ jobs:
           EOF
 
       - name: Initialise Terraform
-        run: terraform init -input=false -lockfile=readonly
+        run: |
+          OCI_config_file_profile="$OCI_CONFIG_FILE_PROFILE" \
+            terraform init -input=false -lockfile=readonly
 
       - name: Validate configuration
         run: terraform validate
 
       - name: Plan development changes
-        run: terraform plan -input=false -lock-timeout=60s -no-color
+        run: |
+          OCI_config_file_profile="$OCI_CONFIG_FILE_PROFILE" \
+            terraform plan -input=false -lock-timeout=60s -no-color
 
       - name: Remove OCI credentials
         if: always()
