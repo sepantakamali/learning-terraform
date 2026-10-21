@@ -14,10 +14,16 @@ variable "environment" {
   type = string
 }
 
+variable "description" {
+  description = "Optional override for the compartment description."
+  type        = string
+  default     = null
+}
+
 resource "oci_identity_compartment" "compartment" {
   compartment_id = var.parent_compartment_id
   name           = "learning-env-${var.environment}"
-  description    = "Terraform-managed ${var.environment} environment"
+  description    = var.description != null ? var.description : "Terraform-managed ${var.environment} environment"
   enable_delete  = true
 }
 
