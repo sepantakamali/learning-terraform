@@ -6,6 +6,7 @@ This is a learning lab with practical automation, not a production reference arc
 
 ## Start here
 
+- [VM and bootstrap guide](docs/vm-and-bootstrap-guide.md): complete VM/network/cloud-init code, explanations, and operating commands.
 - [Practice guide](docs/terraform-practice-guide.md): exercises, reasoning, outcomes, and troubleshooting.
 - [Repository cheat sheet](docs/repository-cheat-sheet.md): reusable commands and HCL examples, including complete mock tests.
 - [Terraform checks](https://github.com/sepantakamali/learning-terraform/actions/workflows/terraform.yml): configuration and test runs.
