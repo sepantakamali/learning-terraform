@@ -32,7 +32,7 @@ module "compartment" {
   }
 
   description = "Development compartment deployed through approved GitHub Actions"
-
+  owner       = "platform-team"
 }
 
 output "compartment_id" {
