@@ -452,3 +452,33 @@ git diff --cached --stat
 ```
 
 Stage the caller and module implementation together, along with tests and intended documentation, then review the staged diff, commit, and push. `git push` sends commits, not uncommitted local files. An `M` in the working-tree column and `??` files are not included merely because local tests passed.
+
+
+## VM operations quick reference
+
+Full code and explanations: [VM and bootstrap guide](vm-and-bootstrap-guide.md).
+
+On the Mac, from `oci-lab`:
+
+```bash
+terraform output application_public_ip
+VM_IP=$(terraform output -raw application_public_ip)
+ssh -i ~/.ssh/oci_learning -o IdentitiesOnly=yes "ubuntu@$VM_IP"
+# After exiting SSH, verify external HTTP:
+curl -i "http://$VM_IP"
+```
+
+On the VM:
+
+```bash
+sudo cloud-init status --wait
+sudo docker ps -a
+sudo docker logs --tail 100 learning-web
+sudo systemctl status docker --no-pager
+sudo tail -n 100 /var/log/cloud-init-output.log
+curl -i http://localhost
+free -h
+df -h /
+```
+
+Connection order: permitted source IP → OCI routing/ingress → guest service → Docker published port → Nginx content. SSH timeout, key rejection, and host-identity mismatch are different errors. `localhost` checks the VM from inside; public-IP HTTP checks the external path. Never assume Terraform apply success means bootstrap is complete.

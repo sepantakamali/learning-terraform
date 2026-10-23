@@ -22,6 +22,8 @@ OCI tenancy
 
 The VM uses `oci-lab/modules/web_server`. Development and production use `environment-lab/modules/compartment`. Shared module code does not mean shared resource ownership: each root's state maps its module address to a different OCI resource ID.
 
+See the [VM and bootstrap guide](vm-and-bootstrap-guide.md) for the full code listings, architecture, flags, verification, and replacement procedure.
+
 ## 1. Provision a network and virtual machine
 
 **Practice:** declare a compartment, VCN, internet gateway, route table, security list, subnet, and Ubuntu instance; inspect a plan, apply it, and connect with SSH.
