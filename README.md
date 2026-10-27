@@ -2,7 +2,7 @@
 
 A hands-on Infrastructure as Code project using Terraform, Oracle Cloud Infrastructure, and GitHub Actions. It provisions an Ubuntu VM running containerized Nginx, separates development and production compartment state, and demonstrates reviewed deployment of a saved Terraform plan.
 
-This is a learning lab with practical automation, not a production reference architecture. Development and production currently contain separate compartments, not separate application stacks.
+I built this project to practise provisioning infrastructure, managing Terraform state, and deploying reviewed changes through GitHub Actions. The guides record the implementation, the reasons for the choices, the explanation of the cases, and the commands needed to operate it again.
 
 ## Start here
 
@@ -10,7 +10,7 @@ This is a learning lab with practical automation, not a production reference arc
 - [Practice guide](docs/terraform-practice-guide.md): exercises, reasoning, outcomes, and troubleshooting.
 - [Repository cheat sheet](docs/repository-cheat-sheet.md): reusable commands and HCL examples, including complete mock tests.
 - [Terraform checks](https://github.com/sepantakamali/learning-terraform/actions/workflows/terraform.yml): configuration and test runs.
-- [Development deployment](https://github.com/sepantakamali/learning-terraform/actions/workflows/terraform-dev.yml): manually triggered plan and approved apply.
+- [Development deployment](https://github.com/sepantakamali/learning-terraform/actions/workflows/terraform-dev.yml): manually triggered plan and approved apply; automated workflow with manual control.
 
 ## Architecture
 
@@ -30,7 +30,7 @@ flowchart TD
     B --- R
 ```
 
-The state bucket is provisioned separately. Each root uses a different object key; the backend configuration connects to an existing bucket and does not create it. Remote-state reads expose root outputs but require access to the underlying snapshot.
+The state bucket is provisioned separately. Each root uses a different object key (the object name within the bucket, such as `environment-lab/dev/terraform.tfstate`); the backend configuration connects to an existing bucket and does not create it. The remote-state data source exposes root outputs but requires access to the underlying snapshot.
 
 ## Repository layout
 
@@ -51,7 +51,7 @@ environment-lab/
 docs/                             Learning guide and operational reference
 ```
 
-Run Terraform in the intended root. Running it at repository top level executes the original local-file exercise, not all the cloud roots.
+Run Terraform in the intended root. Running it at repository top level executes the original local-file exercise.
 
 ## What this project demonstrates
 
@@ -80,20 +80,20 @@ terraform -chdir=environment-lab/modules/compartment init -backend=false -input=
 terraform -chdir=environment-lab/modules/compartment test
 ```
 
-The tests declare `mock_provider "oci" {}`. Their apply runs use mocked operations and do not create real OCI resources. The actual suite contains five tests: two naming tests and three owner-input tests. Expanded test examples in the cheat sheet are reference examples.
+The tests declare `mock_provider "oci" {}`. Their apply runs use mocked operations and do not create real OCI resources. The actual suite contains five tests: two naming tests and three owner-input tests. The cheat sheet also includes an optional six-case owner test example to adapt; the checked-in owner test file contains three cases.
 
 ## Running against OCI
 
-This repository contains lab-specific backend coordinates, imported resource IDs, and credential profile names. A new user must configure their own tenancy, private state bucket, state keys, credentials, region/image/AD choices, and import targets before using it. Do not point a fresh deployment at someone else's state or import IDs.
+This repository contains lab-specific backend coordinates, imported resource IDs, and credential profile names. A new user must configure their own tenancy, private state bucket, state keys, credentials, region, image, availability domain (AD), and import targets before using it. Do not point a fresh deployment at someone else's state or import IDs.
 
-For this lab, local human access uses the `LEARNING_TERRAFORM` profile in `~/.oci/config`. Development selects it through shell environment variables:
+For this lab, local access (manual) uses the `LEARNING_TERRAFORM` profile in `~/.oci/config`. Development selects it through shell environment variables:
 
 ```bash
 export OCI_CONFIG_FILE_PROFILE=LEARNING_TERRAFORM
 export OCI_config_file_profile=LEARNING_TERRAFORM
 ```
 
-From `oci-lab`, supply an untracked `terraform.tfvars` with these inputs (replace every placeholder):
+From `oci-lab`, supply an untracked `terraform.tfvars` with these inputs (replace placeholders with your own info):
 
 ```hcl
 tenancy_ocid        = "YOUR_TENANCY_OCID"
@@ -102,7 +102,7 @@ ssh_public_key_path = "~/.ssh/YOUR_PUBLIC_KEY.pub"
 ubuntu_image_id     = "YOUR_COMPATIBLE_UBUNTU_X86_IMAGE_OCID"
 ```
 
-Initialize the chosen backend, review a plan, and apply only intended changes. Dev and prod read the foundation's compartment output, so foundation state must exist first. The remote state bucket and access policies are prerequisites. For this repository's GitHub deployment exercise, apply dev changes through the workflow rather than also applying them locally.
+Initialize the chosen backend, review a plan, and apply only intended changes. Dev and prod read the foundation's compartment output, so foundation state must exist first. The remote state bucket and access policies are prerequisites. For this repository's GitHub deployment exercise, apply dev changes through the workflow rather than also applying them locally. Push the changes to a branch, open a pull request, and merge after the required checks pass. This updates the code on `main`. Then manually start the development workflow, review the plan, and approve its application to update OCI. 
 
 ## Approved development workflow
 
@@ -117,14 +117,18 @@ GitHub environment `development` requires a reviewer and permits deployments fro
 
 The workflow uses two fresh runners. It encrypts the plan before uploading an artifact, retains it for three days, decrypts it for apply, and cleans up local credentials/files. Encryption protects stored artifact contents; plaintext exists on runners during use. Artifact names include the run attempt, so rerun all jobs rather than only apply. Starting another dispatch creates a new run; it does not continue the previous one.
 
-## Verification and scope
+## Operating the project
 
-As of 23 October 2026, the learner reported five passing tests, a dev plan adding only `owner = "platform-team"` (0 add / 1 change / 0 destroy), and a prod plan with no changes. The final assessment is passed. Deployment of that owner tag has not yet been reported. An earlier description change completed the approved deployment workflow successfully.
+- **Check configuration:** run the checks above before committing. Mock tests exercise module logic; a real plan checks the proposed changes against OCI.
+- **Update SSH access:** if the local public IP changes, update `ssh_source_cidr` in `oci-lab/terraform.tfvars`, review a saved plan, and apply it. Editing the variable file alone leaves the live rule unchanged. HTTP and SSH have separate ingress rules, so the webpage can work while SSH times out.
+- **Verify the VM:** connect with SSH, run `sudo cloud-init status --wait` (waits for cloud-init to finish; useful after creating or booting the VM.” It can also be run later) and `sudo docker ps`, then check `curl -i http://localhost`. See the [VM guide](docs/vm-and-bootstrap-guide.md#connect-and-verify) for commands.
+- **Change development:** use the reviewed workflow above. Production has a separate state and is applied separately.
+- **Refactor or recover a resource binding:** use the cheat sheet's `moved`, import, and removal procedures. These operations have different effects on state and cloud resources.
 
-The VM serves HTTP for the lab; there is no claim of production TLS, high availability, application monitoring, or disaster-recovery certification. Mock tests do not validate live OCI permissions or capacity. State recovery principles are documented, but bucket-version restoration was not performed as an exercise. The repository is a record of learning, including retained migration and import blocks.
+The application currently runs on one VM and serves HTTP. The development and production examples each manage a compartment; they do not deploy additional copies of the web application.
 
-## Keeping the repository safe and useful
+## Files to keep local
 
-Commit `.terraform.lock.hcl` files, source, tests, and documentation. Do not commit credentials, private keys, state snapshots, private variable values, or saved plans. Existing `.gitignore` rules cover common Terraform files, not every possible secret filename. Review the staged diff before publishing.
+Commit Terraform source, provider lockfiles, tests, workflows, and documentation. Keep private keys, credential files, state snapshots, saved plans, and private variable values out of Git. Review `git diff --cached` before publishing; `.gitignore` only covers the patterns it lists.
 
-Use the cheat sheet's targeted procedures for imports and removal. Do not run a blanket destroy to finish a lesson: dev/prod depend on the foundation, and collection resources have destruction protection. Keep documentation status aligned with what has actually been verified.
+### This README and the other documentation in this repository are for personal learning and future reference.
