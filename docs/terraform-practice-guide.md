@@ -1,6 +1,6 @@
 # Terraform practice guide
 
-This is the learning record for `learning-terraform`, reconstructed from our exercises and checked against the repository through 23 October 2026. Completed cloud actions below are based on reported command results; this document is not a fresh audit of OCI. Commands are examples to run deliberately, not a script to execute from top to bottom.
+Implementation notes for `learning-terraform`: what was built, why it is configured this way, and how to repeat the operations or diagnose the same problems. Use the linked cheat sheet for copyable commands and the VM guide for full infrastructure and bootstrap code. Choose the relevant procedure rather than executing the whole guide as a script.
 
 ## Repository and dependency map
 
@@ -43,6 +43,8 @@ See the [VM and bootstrap guide](vm-and-bootstrap-guide.md) for the full code li
 SSH `-i` selects the private identity key. `-o IdentitiesOnly=yes` sets an SSH option that restricts offered identities. `known_hosts` records server identities; multiple entries can represent different host-key algorithms. `ssh-keygen -R IP` removes recorded keys for that host, not your login key.
 
 `free -h`: `free` is unused RAM; `buff/cache` includes filesystem caches; `available` estimates memory usable by new work without swapping and includes reclaimable cache. MiB means mebibytes. Low free memory alone does not establish memory pressure. `tmpfs` is a memory-backed filesystem that can use swap when available; Docker can mount one for temporary container data.
+
+**SSH timeout case:** the website remained reachable, but SSH timed out before authentication. The allowed source IP had been edited locally without applying it. Configuration files describe the desired rule; OCI continues enforcing the old rule until apply updates it. Review the security-list diff before applying, then retry SSH.
 
 ## 3. Bootstrap with cloud-init, Docker, and Nginx
 
@@ -111,9 +113,9 @@ removed {
 }
 ```
 
-**Result reported:** Terraform stopped managing the compartment while OCI retained it. Omitting the explicit `destroy = false` would not express that intention. Restoring the resource and import declarations and applying an import plan reconnects the same OCID. Merely restoring the file does not restore the state binding.
+**Result:** Terraform stopped managing the compartment while OCI retained it. Omitting the explicit `destroy = false` would not express that intention. Restoring the resource and import declarations and applying an import plan reconnects the same OCID. Merely restoring the file does not restore the state binding.
 
-**Completed checkpoint:** the learner reported successful re-import and verification. The re-import plan showed `1 to import, 0 to add, 1 to change, 0 to destroy`, rather than the initially predicted import-only summary. The additional diff was `+ enable_delete = true`: a provider-side setting reconstructed from configuration, not a deletion request. The learner correctly stopped to investigate the unexpected change before applying.
+**Re-import case:** the plan showed `1 to import, 0 to add, 1 to change, 0 to destroy`. The extra change was `+ enable_delete = true`: a provider-side setting reconstructed from configuration, not a request to delete the compartment. Inspect the individual diff rather than assuming every import has an import-only summary.
 
 The removed entry really was deleted from the current state. Re-import reconstructed an entry by reading the same existing OCI compartment; it did not recover the old entry from backup. Other state entries were unaffected. Historical snapshots may remain under bucket versioning.
 
@@ -137,6 +139,10 @@ Validation permits purpose `temporary` or `retained`. A conditional chooses the 
 
 **Why:** locking protects state from concurrent writers. `-lock-timeout=60s` waits up to that duration to acquire a lock; it is not an overall apply timeout. It does not lock the entire bucket or other states.
 
+For this OCI backend, Terraform attempts to create an object named after the state key with `.lock` appended. The creation request uses `If-None-Match: *`, meaning it must succeed only if that object does not already exist. This atomic condition lets one operation acquire the lock; another cannot overwrite it. Our second terminal received HTTP 412 while the first held it. Normal completion or cancellation releases the lock. [OCI backend locking](https://developer.hashicorp.com/terraform/language/backend/oci)
+
+The lock coordinates Terraform operations on that state. It does not stop the VM, block console edits, or lock other environment state keys. GitHub workflow concurrency is a separate scheduling control. A lock left by an interrupted process requires checking that the original operation has stopped before considering `force-unlock`.
+
 An apply waiting for input can retain a lock. Ctrl-Z suspends a process rather than finishing it; use `jobs`, then `fg` and an appropriate cancellation to stop a suspended command. Do not force-unlock a live operation or use `-lock=false` to bypass a real conflict.
 
 Terraform does not guarantee transaction-wide rollback after a partial failure. Successfully created objects can remain. Inspect the error, state, and fresh plan before retrying. A stale plan needs regeneration and renewed review, not forced application.
@@ -159,7 +165,7 @@ We repaired a Mac ARM/Linux AMD64 CI checksum problem by recording both platform
 
 **Why:** `fmt` checks formatting; `validate` checks configuration consistency; mock `terraform test` checks expressions and assertions without deploying real infrastructure. These tests do not establish real OCI authorization, capacity, or network reachability. Mock IDs need to satisfy whatever validation is actually exercised; realistic-looking strings are not proof of real resource existence.
 
-The `Terraform checks` workflow initializes and validates oci-lab, dev, and prod with `-backend=false`, then runs the compartment module's naming tests. The compartment module is used by dev and prod, not by the unrelated web-server module. Job label `validate` covers all these steps; it is not the duration of the validate command alone.
+The `Terraform checks` workflow initializes and validates oci-lab, dev, and prod with `-backend=false`, then runs the compartment module's naming and owner-input tests. The compartment module is used by dev and prod, not by the unrelated web-server module. Job label `validate` covers all these steps; it is not the duration of the validate command alone.
 
 ## 12. Git, pull requests, and branch protection
 
@@ -185,7 +191,7 @@ The workflow selects `GITHUB_TERRAFORM_DEV`. The OCI provider uses `OCI_CONFIG_F
 
 ## 14. Approved saved-plan deployment
 
-**Practice:** manually dispatch the main-branch workflow, approve plan access, inspect the plan, approve apply, then change only development's description through a PR and the workflow. Both the no-change run and actual description deployment were reported successful.
+**Practice:** manually dispatch the main-branch workflow, approve plan access, inspect the plan, approve apply, then change only development's description through a PR and the workflow. This exercised both a no-change run and deployment of an actual description update.
 
 **Why:** the apply job consumes the exact saved plan instead of generating a different unreviewed plan. Both jobs use the protected development environment, giving two approval gates. GitHub calls these deployments even when the first job only plans.
 
@@ -195,19 +201,45 @@ Encryption protects the stored artifact's contents, not a compromised runner tha
 
 `checkout` obtains repository files; its GitHub token is separate from OCI credentials. `persist-credentials: false` avoids persisting checkout authentication for later Git commands. `terraform_wrapper: false` disables setup-terraform's output-capturing wrapper. `-no-color` removes ANSI formatting. `needs: plan` orders jobs; it does not itself grant approval.
 
-Current implementation note from file inspection: the plan-creation step does not yet set `umask 077`; encryption and decryption steps do. Adding it before plan creation would also restrict the initial plaintext file permissions. Documentation creation did not alter the workflow.
+File permissions: the plan-creation step does not yet set `umask 077`; encryption and decryption steps do. Adding it before plan creation would also restrict the initial plaintext file permissions.
 
-## Recovery principles — explanation, not an executed recovery drill
+## State recovery considerations
 
 The state bucket has versioning enabled. Recovery begins by stopping competing writers, backing up the current state, identifying the correct state key and historical version, and comparing that snapshot with actual infrastructure. Restoring an older state does not roll back cloud resources; it changes Terraform's records. A subsequent plan can propose unexpected actions if records and reality differ.
 
-For one accidentally forgotten resource, a reviewed import is often more focused than restoring a whole old snapshot. Do not casually overwrite remote state or use forced state push. The lab has practised locks, stale plans, import, and removal, but has not deliberately corrupted state or demonstrated bucket-version restoration.
+For one accidentally forgotten resource, a reviewed import is often more focused than restoring a whole old snapshot. Do not casually overwrite remote state or use forced state push.
 
-## Course completion and follow-through
+## 15. Optional owner tags and module tests
 
-1. Completed: remove the imported compartment from management and re-import the same OCI object.
-2. Completed: owner-input assessment passed on 23 October 2026: five tests passed, dev planned only the owner-tag update, and prod planned no changes. Applying the tag through CI is a separate deployment follow-through, not an additional assessment requirement.
-3. Keep this guide updated as the repository changes. Terraform is an ongoing tool, not a list of commands to memorize.
+The compartment module accepts an optional `owner` string. Omitted or null means no owner tag; any nonblank string is accepted and preserved; an empty or whitespace-only string fails validation. `platform-team` is the development caller's value, not a required literal.
+
+The checked-in suite has two naming tests and three owner tests: supplied, omitted, and invalid whitespace. With `mock_provider "oci" {}`, a test's `command = apply` uses mock operations rather than creating a cloud compartment.
+
+**Problem encountered:** changing the omitted-owner test to `command = plan` produced `Unknown condition value`. The module passes null for the optional/computed tag map, so its result can be unknown during planning. Mock apply resolves that value. Test absence with a key-presence assertion after resolution; `try` catches expression errors but cannot turn an unknown value into a known one.
+
+```bash
+# From the repository root:
+terraform -chdir=environment-lab/modules/compartment init -backend=false -input=false
+terraform -chdir=environment-lab/modules/compartment test
+terraform -chdir=environment-lab/dev plan
+terraform -chdir=environment-lab/prod plan
+```
+
+The owner change produced a dev plan adding only the tag and a prod plan with no changes. This demonstrates separate environment inputs and state despite shared module code. See the [cheat sheet](repository-cheat-sheet.md#module-test-design-optional-owner-input) for the implementation snippets, assertions, and an optional expanded test suite.
+
+## Project glossary
+
+| Term | Meaning in this project |
+|---|---|
+| AD — Availability Domain | One or more isolated data centres within an OCI region; determines VM placement. It is separate from a compartment or a dev/prod environment. |
+| OCID | Oracle's identifier for a cloud resource. |
+| Object key | An object's name within a bucket, such as `environment-lab/dev/terraform.tfstate`; it is not an OCID. |
+| Reference example | A code example to look up and adapt later. Expanded examples are labelled separately from checked-in implementation. |
+| Terraform reference | An expression such as `oci_core_subnet.application.id` that reads another value and can establish a dependency. |
+| State lock | Temporary exclusive access to a particular Terraform state during an operation. |
+| Provider lockfile | `.terraform.lock.hcl`: selected provider versions and checksums; unrelated to the temporary state lock. |
+
+An AD has separate power, cooling, and internal networking from other ADs in its region. Placing one VM in an AD does not make the application highly available. [OCI regions and availability domains](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)
 
 ## Official references
 
@@ -217,27 +249,3 @@ For one accidentally forgotten resource, a reviewed import is often more focused
 - [OCI backend](https://developer.hashicorp.com/terraform/language/backend/oci)
 - [Artifact upload](https://github.com/actions/upload-artifact) and [download](https://github.com/actions/download-artifact)
 - [GPG password-input flags](https://www.gnupg.org/documentation/manuals/gnupg/GPG-Esoteric-Options.html)
-
-
-## Final assessment checkpoint — 23 October 2026
-
-The learner reported five passing mock tests: two naming tests and three owner cases (supplied, omitted, whitespace). This confirms those tested cases, not every possible valid owner. Review found validation additionally restricted the owner to `platform-team`, although any nonblank team name should be accepted. That restriction needs removal and another valid-name test should prevent regression. Deployment of this assessment is not yet recorded; the later assessment result below supersedes this intermediate code review.
-
-The omitted test currently uses mock `command = apply` and `try(map["owner"], null) == null`. With the OCI provider mocked this does not create a real OCI compartment. It accepts either a missing owner key or a null-valued owner key, so it is broader than a strict absence assertion. The module currently assigns null to the whole optional tag map when the owner is omitted. This can leave the computed provider attribute unknown at plan time; a mock apply resolves it.
-
-Clear acceptance criteria: omitted/null is valid and adds no owner tag; any nonblank string is valid and is preserved; empty or whitespace-only strings fail variable validation. `platform-team` is sample data, not an allowed-values list.
-
-### Assessment clarification: expectations and unknown values
-
-The original exercise explanation did not distinguish sufficiently clearly between omitted/null and an empty string, or between sample owner data and an allowed-values list. This was an instruction ambiguity, not evidence that the learner should have guessed a different specification. The agreed requirement is now explicit: any nonblank string is accepted; omitted/null adds no owner tag; empty/whitespace is rejected.
-
-After correcting validation, the learner changed the omitted-owner test to a plan and saw `Unknown condition value`. This is not a requirement to supply an owner. With the current null fallback, the optional/computed tag map is unknown until mocked apply. The previous use of mock apply was appropriate. A strict absence assertion checks map keys after resolution, rather than comparing an indexed missing value to null. `try` does not resolve unknown values.
-
-The cheat sheet now contains complete owner-input, resource-argument, caller-input, and six-run mock test examples, initialization/test/filter commands, and an explanation of assertions and unknown values. These are reference snippets, not automatic changes to the learner's implementation. At this historical checkpoint, successful execution of the revised suite and final deployment were unconfirmed. See the assessment result below for the subsequent verified tests and plans.
-
-
-## Assessment result — passed, 23 October 2026
-
-The learner supplied evidence of five passing tests (two naming and three owner tests), a development plan containing only `owner = "platform-team"` with 0 add / 1 change / 0 destroy, and a production plan reporting no changes. This satisfies the original implementation, three required test cases, and environment-isolation requirements. The exercise is passed. Additional example test cases in the cheat sheet are reference extensions, not retroactive pass requirements.
-
-The assessment involved clarification and guided debugging; it should not be represented as an entirely unassisted implementation or as proof of mastery of every Terraform feature. Deployment of this particular owner tag has not yet been reported and is separate from the passed assessment. Earlier pending checkpoints above describe the historical progression and are superseded by this result.

@@ -282,7 +282,7 @@ gh run view RUN_ID --json status,jobs
 gh run view RUN_ID --log-failed
 ```
 
-Substitute the actual IDs and branch. Compare local, remote-branch, and PR commit IDs. Our earlier stale PR head resolved after GitHub updated its metadata. In another incident all step timestamps showed quick completion despite stale job status; a check rerun resolved the learner's merge block. Neither incident justified force-pushing or bypassing rules.
+Substitute the actual IDs and branch. Compare local, remote-branch, and PR commit IDs. Our earlier stale PR head resolved after GitHub updated its metadata. In another incident all step timestamps showed quick completion despite stale job status; rerunning the check allowed the PR to merge. Neither incident justified force-pushing or bypassing rules.
 
 
 ## Module test design: optional owner input
@@ -298,9 +298,9 @@ Substitute the actual IDs and branch. Compare local, remote-branch, and PR commi
 
 With `mock_provider "oci" {}`, `command = apply` uses mocked provider operations, not live OCI resources. It can resolve values unknown during plan. Tests do not establish live IAM access. `try(map["owner"], null) == null` accepts both a missing key and a null value; use a key-presence check when absence itself is the requirement. Passing tests prove their assertions, not all input cases.
 
-## Runnable reference: owner input and mock tests
+## Owner input code and optional expanded tests
 
-These are reference examples, not changes automatically applied to the module or tests. The examples deliberately retain the module's current `null` fallback for `freeform_tags`.
+The following snippets explain the module's owner input and its `null` fallback for `freeform_tags`. The six-run test file below is an optional expanded example to adapt; the repository's owner test file contains three runs.
 
 Input declaration in the shared module:
 
@@ -331,7 +331,7 @@ owner = "platform-team"
 
 `platform-team` is example data, not a required literal. Omitted/null is allowed; empty string/whitespace is rejected. The condition checks trimmed content but preserves the supplied nonblank string as the tag value.
 
-Complete reference `tests/owner-tag.tftest.hcl`:
+Optional expanded `tests/owner-tag.tftest.hcl` (six cases):
 
 ```hcl
 mock_provider "oci" {}
@@ -433,10 +433,6 @@ Mock providers normally generate computed values during apply. For this test, ke
 
 Reference: https://developer.hashicorp.com/terraform/language/tests/mocking
 
-
-## Verified owner exercise result — 23 October 2026
-
-Five tests passed: naming for dev/prod, supplied owner, omitted owner, and whitespace rejection. Dev plan: only `owner = "platform-team"`, 0 add / 1 change / 0 destroy. Prod plan: no changes. Assessment passed; deployment of the tag is not yet recorded. The six-case reference suite above extends the three required owner cases and is not a claim that all six were executed.
 
 ## Case solved: local validation passes but CI says unsupported module argument
 

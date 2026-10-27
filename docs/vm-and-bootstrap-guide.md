@@ -1,6 +1,6 @@
 # VM, networking, and bootstrap reference
 
-Checked against this repository on 23 October 2026. This chapter explains the actual VM implementation, not a separate deployment template. Source listings below need the existing root/module files and credentials; do not paste duplicate resource blocks into the project.
+This chapter documents the VM implementation, its network dependencies, and the commands for setup and troubleshooting. Source listings below need the existing root/module files and credentials; do not paste duplicate resource blocks into the project.
 
 ## What a VM is
 
@@ -24,7 +24,7 @@ OCI physical infrastructure
 | Setting | Meaning in this lab |
 |---|---|
 | Compartment | OCI resource organization and IAM scope; not a VM or network |
-| Availability domain | Placement location within the region |
+| Availability domain (AD) | One or more isolated data centres within the region; the VM placement location |
 | Shape | Virtual hardware allocation; E2.1.Micro is the selected fixed shape |
 | Image | OS boot template; the chosen Ubuntu image must support x86 and the shape |
 | Boot volume | Persistent virtual disk used for the OS and local files; configured as 50 GiB |
