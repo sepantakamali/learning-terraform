@@ -1,32 +1,33 @@
 # Repository cheat sheet
 
-Companion: [Practice guide](terraform-practice-guide.md). Paths and commands below are relative to the repository root unless stated otherwise. Choose the intended root before running Terraform; do not run every example as a script.
+Paths and commands below are relative to the repository root unless stated otherwise. Choose the intended root before running Terraform.
 
 ## Where things live
 
 | Path | Purpose |
 |---|---|
-| `oci-lab/` | Foundation: compartment, network, VM, collection/import exercises |
-| `oci-lab/network.tf` | OCI networking and learning compartment |
-| `oci-lab/compute.tf` | Web module call, moved addresses, IP outputs |
+| `oci-lab/` | Foundation: contains learning root compartment, network, and VM infrastructure and collection/import exercises |
+| `oci-lab/network.tf` | OCI network and compartment |
+| `oci-lab/compute.tf` | Calls the web_server module to configure the VM; contains address migrations and IP outputs. |
 | `oci-lab/cloud-init.yaml` | VM's initial Docker/Nginx setup |
 | `oci-lab/modules/web_server/` | Reusable VM definition and input validation |
 | `oci-lab/collections.tf` | Map inputs, filtering, tags, lifecycle exercises |
 | `oci-lab/import-practice.tf` | Import/removal exercise; inspect its current contents |
-| `environment-lab/dev/` | Development root and separate remote state |
-| `environment-lab/prod/` | Production root and separate remote state |
+| `environment-lab/dev/` | Development root and its separate remote state |
+| `environment-lab/prod/` | Production root and its separate remote state |
 | `environment-lab/*/dependencies.tf` | Reads foundation state outputs |
 | `environment-lab/modules/compartment/main.tf` | Shared compartment resource, variables, output |
 | `environment-lab/modules/compartment/tests/` | Mock-provider naming tests |
 | `.github/workflows/terraform.yml` | Formatting, initialization, validation, mock tests |
 | `.github/workflows/terraform-dev.yml` | Manual authenticated plan and approved apply |
 
-The three working roots use separate state keys in `learning-terraform-state`. The repository top level is not a wrapper that applies all roots. A child module directory is normally called by a root, not applied independently.
+The three working roots use separate state keys in `learning-terraform-state` (the bucket state).
 
 ## Routine local checks
 
 ```bash
-terraform fmt -check -diff -recursive
+# Only checks, doesn't apply anything
+terraform fmt -check -diff -recursive 
 # To fix formatting deliberately:
 terraform fmt -recursive
 
@@ -48,20 +49,20 @@ terraform state list
 terraform output
 ```
 
-`terraform -chdir=oci-lab plan` is equivalent to changing directory first and running plan there. The saved-plan path is relative to that Terraform working directory. Do not use a saved plan after a state-changing operation; generate and review a fresh one.
+`terraform -chdir=oci-lab plan` is equivalent to temporarily changing directory (of terraform, shell directory stays the same) and running plan there and returning to shell directory. The saved-plan path is relative to that Terraform working directory (the child directory). always generate a fresh plan after changes, `terraform plan` is useful to check the status, be aware of the directory.
 
 ## Identity selection for local work
 
-For foundation work using the human profile:
+For foundation work using the developer profile (my own profile):
 
 ```bash
 export OCI_CONFIG_FILE_PROFILE=LEARNING_TERRAFORM
 export OCI_config_file_profile=LEARNING_TERRAFORM
 ```
 
-For deliberately testing the restricted dev identity, set both to `GITHUB_TERRAFORM_DEV`. Explicit provider/backend profile settings can override environment selection. Shell exports persist in the current shell. A profile selects identity; the backend key selects state; resource inputs select target resources.
+For deliberately testing the restricted dev identity, set both to `GITHUB_TERRAFORM_DEV`. Explicit provider/backend profile settings can override environment selection. Shell-exports persist in the current shell. A profile selects identity; the backend key selects state; resource inputs select target resources.
 
-Never commit private keys, credential files, state, variable files containing secrets, or saved plans. Lockfiles are committed. The current `.gitignore` does not ignore every possible secret filename: inspect staged filenames before committing.
+Never commit private keys, credential files, state, variable files containing secrets, or saved plans. Lockfiles are committed. The current `.gitignore` contains the known formats but you still need to check tracked files to make sure no secret leaks.
 
 ## State decisions
 
@@ -73,9 +74,9 @@ Never commit private keys, credential files, state, variable files containing se
 | Record externally changed values in state only | Reviewed refresh-only plan/apply |
 | Restore declared values after drift | Normal reviewed plan/apply |
 | Prevent configured resources from destruction | `prevent_destroy`; not a permanent cloud-side guard |
-| Select a different environment | Its root directory/backend state key |
+| Select a different environment | move to its root directory or select its backend state key |
 
-State changes can matter even when the summary reports zero infrastructure additions, changes, and destruction. State is not a history of every apply. Bucket versions and Git history serve different recovery purposes.
+State changes can matter even when the summary reports zero infrastructure additions, changes, and destruction. State is not a history, it is the latest known state of the infrastructure (resource bindings and the attributes) based on latest Terraform persist. Planning reads current infrastructure to calculate proposed changes. The directory and state matter in the correctness of the report.
 
 ## Provider maintenance
 
@@ -85,6 +86,7 @@ terraform init -upgrade
 # Review version/checksum changes; validate and plan afterwards.
 git diff -- .terraform.lock.hcl
 
+# Specify necessary platforms:
 terraform providers lock \
   -platform=darwin_arm64 \
   -platform=linux_amd64
@@ -96,10 +98,12 @@ Run these in the intended root. `-upgrade` selects allowed dependency versions, 
 
 ```bash
 git switch main
+# Fast-forward, updating to the latest version
 git pull --ff-only
 git switch -c descriptive-branch-name
 # Edit and check files, then stage only intended paths.
 git add path/to/changed-file
+# Review staged changes—the changes included in the next commit.
 git diff --cached
 git commit -m "Describe the change"
 git push -u origin descriptive-branch-name
@@ -118,15 +122,15 @@ gh pr merge --merge --delete-branch
 # Run once after merging the intended changes:
 gh workflow run terraform-dev.yml --ref main
 gh run list --workflow terraform-dev.yml --limit 5
-# Substitute the actual numeric run ID:
+# Substitute with actual run ID!
 gh run view RUN_ID
 gh run watch RUN_ID
 ```
 
-1. Approve the plan job's environment access.
+1. Approve the plan job’s access to the GitHub development environment. This allows the job to use that environment’s secrets. The OCI user’s IAM policies separately determine which cloud resources and state objects it can access.
 2. Read the `Plan development changes` log.
 3. Approve apply only if the saved plan matches your intention.
-4. Confirm apply success. Starting another workflow is a new deployment run, not a way to watch the existing one.
+4. Confirm apply success.
 
 If a duplicate was started accidentally: `gh run cancel RUN_ID`. A successful cancellation does not undo previously completed changes. Rerun all jobs for this artifact-name scheme rather than only apply.
 
@@ -150,9 +154,9 @@ If a duplicate was started accidentally: `gh run cancel RUN_ID`. A successful ca
 
 ## GPG plan handoff
 
-`--batch`: no interactive questions. `--yes`: accept GPG confirmations such as overwrites. `--pinentry-mode loopback`: supply the password through the caller instead of an interactive Pinentry program. `--passphrase-fd 0`: read it from standard input. `--symmetric`: password-based encryption. `--cipher-algo AES256`: choose AES-256. `--output`: destination file. `--decrypt`: reverse encryption.
+`--batch`: no interactive questions. `--yes`: accept GPG confirmations such as overwrites. `--pinentry-mode loopback`: supply the password through the caller instead of an interactive Pinentry program. `--passphrase-fd 0`: read it from standard input. `--symmetric`: password-based encryption. `--cipher-algo AES256`: choose AES-256. `--output`: destination file. `--decrypt` decrypts the encrypted input.
 
-The plaintext plan exists on trusted runners. Only the encrypted file is uploaded. Deleting a file reduces its exposure but is not guaranteed forensic erasure. Never print the password or upload the whole Terraform directory.
+The plaintext plan exists on trusted runners. Only the encrypted file is uploaded. And only the encrypted version is downloadable.
 
 ## Quick diagnostics
 
@@ -161,9 +165,9 @@ The plaintext plan exists on trusted runners. Only the encrypted file is uploade
 - Lock error: identify the active owner before considering stale-lock recovery.
 - No checks reported: not the same as checks passed.
 - Merge blocked: inspect required checks/reviews and current PR commit.
-- Apparent long validation: inspect individual step timestamps; job labels can be stale.
+- Apparent long validation: inspect individual step timestamps (to know approximately on which step it could be stuck); job labels can be stale. sometimes a retry/rerun fixes it.
 - OCI checksum mismatch in CI: inspect initialization output and platform checksums.
-- `-out=...: command not found`: check the preceding line's continuation backslash.
+- `-out=...: command not found`: check the preceding line's continuation backslash ( \ newline).
 - YAML parser error: check indentation, context names, and duplicate keys; `git diff --check` is not a YAML validator.
 
 
@@ -216,7 +220,26 @@ terraform apply forget.tfplan
 terraform state list
 ```
 
-Verify independently in the cloud console that the object still exists. The entry is deleted from current state; the real object remains. To restore management, restore the resource/import declarations and apply a reviewed import plan. This reconstructs the entry; it does not roll back infrastructure or retrieve old state history.
+After applying the `removed` block, verify that the compartment still exists in OCI. Terraform has removed its entry from state but has not deleted the compartment. To manage it again, remove the removed block, restore the resource declaration, and add an import block containing the existing compartment’s OCID. Review and apply the import plan. Terraform reads that compartment from OCI and records its association with the resource declaration again. This is re-import; it does not require the previous state entry or a state backup.
+
+For example, using the cheat sheet’s resource label:
+
+```hcl
+import {
+  to = oci_identity_compartment.example
+  id = "EXISTING_COMPARTMENT_OCID"
+}
+```
+
+The matching resource `"oci_identity_compartment" "example"` block must also exist. Then:
+
+```bash
+terraform plan -out=reimport.tfplan
+terraform show reimport.tfplan
+terraform apply reimport.tfplan
+```
+
+Import can also propose updates if your declaration differs from the existing compartment, so inspect the entire plan.
 
 ## Case: refactor an address without replacing a resource
 
@@ -282,7 +305,7 @@ gh run view RUN_ID --json status,jobs
 gh run view RUN_ID --log-failed
 ```
 
-Substitute the actual IDs and branch. Compare local, remote-branch, and PR commit IDs. Our earlier stale PR head resolved after GitHub updated its metadata. In another incident all step timestamps showed quick completion despite stale job status; rerunning the check allowed the PR to merge. Neither incident justified force-pushing or bypassing rules.
+Substitute with actual IDs and branch. Compare local, remote-branch, and PR commit IDs. Our earlier stale PR head resolved after GitHub updated its metadata. In another incident all step timestamps showed quick completion despite stale job status; rerunning the check allowed the PR to merge. Neither incident justified force-pushing or bypassing rules.
 
 
 ## Module test design: optional owner input
@@ -291,12 +314,12 @@ Substitute the actual IDs and branch. Compare local, remote-branch, and PR commi
 |---|---|---|
 | `"platform-team"` | Matching owner tag | Assert tag value |
 | Another name such as `"application-team"` | Also accepted, preserved | Separate assertion; catches accidental hardcoding |
-| Omitted or explicit null | No owner tag | Assert absence of the key once map is known |
+| Omitted or explicit null | No owner tag | Assert absence of the key (once map is known-e.g. apply) |
 | `""` or `"   "` | Input rejected | `expect_failures = [var.owner]` |
 
-`assert` checks a result of an otherwise successful run. `expect_failures` names the validation/check expected to fail: the test passes when the expected diagnostic occurs, and fails when the invalid input is accepted. It does not mean any arbitrary execution error counts as success.
+`assert` checks if the condition is true. `expect_failures` is successful when the specified variable's validation fails. It does not mean any arbitrary execution-error counts as success.
 
-With `mock_provider "oci" {}`, `command = apply` uses mocked provider operations, not live OCI resources. It can resolve values unknown during plan. Tests do not establish live IAM access. `try(map["owner"], null) == null` accepts both a missing key and a null value; use a key-presence check when absence itself is the requirement. Passing tests prove their assertions, not all input cases.
+With `mock_provider "oci" {}`, `command = apply` uses mocked provider operations, not live OCI resources. It can resolve values unknown during plan. Tests do not establish live IAM access. `try(map["owner"], null) == null` accepts both a missing key and a null value; use a key-presence check when absence itself is the requirement.
 
 ## Owner input code and optional expanded tests
 
@@ -352,7 +375,7 @@ run "owner_supplied" {
   }
 }
 
-run "different_owner_supplied" {
+run "owner_supplied_different" {
   command = plan
   variables {
     owner = "application-team"
@@ -401,7 +424,7 @@ run "owner_whitespace" {
 
 The file-level `variables` block supplies shared inputs to every run; each run overrides or adds its own inputs. A run's owner override does not become the next run's default. The omitted/null runs use mocked apply to resolve computed provider values, not to deploy OCI resources. With a real provider, test apply can create real resources: always inspect the provider configuration before reusing a test.
 
-Why the absence assertion works: `coalesce(tags, {})` substitutes an empty map for a known null map; `keys` returns its keys; `contains` tests for the owner key; `!` negates that result. A present `owner = null` would still have that key and would fail this strict absence check. `coalesce` does not resolve an unknown value before apply.
+Why the absence assertion works: `coalesce(tags, {})` returns a key-value map of known tags or returns an empty map if null; `keys` returns its keys; `contains` tests for the owner key; `!` negates that result. A present `owner = null` would still have that key and would fail this strict absence check. `coalesce` does not resolve an unknown value before apply.
 
 Commands from repository root:
 
@@ -421,7 +444,7 @@ terraform -chdir=../modules/compartment test
 terraform -chdir=../modules/compartment test -filter=tests/owner-tag.tftest.hcl
 ```
 
-`-filter` selects a test file, not a run-block name. `init -backend=false` initializes dependencies without connecting to a backend; the mocked provider, not this flag, is what prevents OCI API operations in these tests.
+`-filter` selects a test file, not a run-block name. `init -backend=false` initializes dependencies without connecting to a backend; the mocked provider (and not this flag!), is what prevents OCI API operations in these tests.
 
 ### Case solved: Unknown condition value in omitted-owner test
 
@@ -429,7 +452,7 @@ With `owner` omitted, the module passes null for the whole optional/computed tag
 
 Mock providers normally generate computed values during apply. For this test, keep `command = apply` and assert key absence after resolution. Directly indexing an absent key can instead produce an invalid-index error after apply, so do not use `tags["owner"] == null` to test absence.
 
-`try` handles expression errors (such as an absent key), not unknown values. It does not turn a valid but unknown expression into its fallback. An alternative for other tests is `mock_provider "oci" { override_during = plan }`, which generates mock values during planning; choose it intentionally. Avoid overriding the owner result itself merely to force an assertion to pass.
+`try` handles expression errors (such as an absent key), not unknown values. It does not turn a valid but unknown expression into its fallback. An alternative for other tests is `mock_provider "oci" { override_during = plan }`, which generates mock values during planning.
 
 Reference: https://developer.hashicorp.com/terraform/language/tests/mocking
 
@@ -458,7 +481,7 @@ On the Mac, from `oci-lab`:
 
 ```bash
 terraform output application_public_ip
-VM_IP=$(terraform output -raw application_public_ip)
+VM_IP=$(terraform output -raw application_public_ip) # Or you could simply copy/paste the IP
 ssh -i ~/.ssh/oci_learning -o IdentitiesOnly=yes "ubuntu@$VM_IP"
 # After exiting SSH, verify external HTTP:
 curl -i "http://$VM_IP"
@@ -477,4 +500,4 @@ free -h
 df -h /
 ```
 
-Connection order: permitted source IP → OCI routing/ingress → guest service → Docker published port → Nginx content. SSH timeout, key rejection, and host-identity mismatch are different errors. `localhost` checks the VM from inside; public-IP HTTP checks the external path. Never assume Terraform apply success means bootstrap is complete.
+Connection order: permitted source IP → OCI routing/ingress → guest service → Docker published port → Nginx content.
