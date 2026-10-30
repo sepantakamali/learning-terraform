@@ -1,6 +1,6 @@
 # Terraform practice guide
 
-Implementation notes for `learning-terraform`: what was built, why it is configured this way, and how to repeat the operations or diagnose the same problems. Use the linked cheat sheet for copyable commands and the VM guide for full infrastructure and bootstrap code. Choose the relevant procedure rather than executing the whole guide as a script.
+Implementation notes for `learning-terraform`: what was built, why it is configured this way, and how to repeat the operations or diagnose the same problems. Use the linked cheat sheet for copyable commands and the VM guide for full infrastructure and bootstrap code.
 
 ## Repository and dependency map
 

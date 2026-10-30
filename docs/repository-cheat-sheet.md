@@ -60,7 +60,7 @@ export OCI_CONFIG_FILE_PROFILE=LEARNING_TERRAFORM
 export OCI_config_file_profile=LEARNING_TERRAFORM
 ```
 
-For deliberately testing the restricted dev identity, set both to `GITHUB_TERRAFORM_DEV`. Explicit provider/backend profile settings can override environment selection. Shell-exports persist in the current shell. A profile selects identity; the backend key selects state; resource inputs select target resources.
+For deliberately testing the restricted dev identity, set both to `GITHUB_TERRAFORM_DEV`. Explicit provider/backend profile settings can override environment selection. Shell-exports persist in the current shell. The profile selects the identity making requests. The backend key selects the state. Resource arguments specify the desired resource settings and relationships, such as the compartment and subnet used by a VM.
 
 Never commit private keys, credential files, state, variable files containing secrets, or saved plans. Lockfiles are committed. The current `.gitignore` contains the known formats but you still need to check tracked files to make sure no secret leaks.
 
@@ -112,6 +112,7 @@ gh pr checks --watch
 gh pr diff
 # Once reviewed and required checks pass:
 gh pr merge --merge --delete-branch
+gh pr merge --auto --merge --delete-branch # Wait for merge requirements.
 ```
 
 `q` exits the diff pager. `--ff-only` refuses divergent-history merges. `--` separates paths from revision/options in commands such as `git diff -- file`. `??` is untracked; `M` is modified. `--auto` requests merging after requirements pass if supported; `--admin` bypasses protections and is not the normal fix for blocked checks.
@@ -305,7 +306,7 @@ gh run view RUN_ID --json status,jobs
 gh run view RUN_ID --log-failed
 ```
 
-Substitute with actual IDs and branch. Compare local, remote-branch, and PR commit IDs. Our earlier stale PR head resolved after GitHub updated its metadata. In another incident all step timestamps showed quick completion despite stale job status; rerunning the check allowed the PR to merge. Neither incident justified force-pushing or bypassing rules.
+Substitute with actual IDs and branch. Compare local, remote-branch, and PR commit IDs. Our earlier stale PR head resolved after GitHub updated its metadata. In another incident all step timestamps showed quick completion despite stale job status; rerunning the check allowed the PR to merge. Check the current PR commit and individual check results before deciding how to resolve a blocked merge.
 
 
 ## Module test design: optional owner input
@@ -500,4 +501,20 @@ free -h
 df -h /
 ```
 
-Connection order: permitted source IP → OCI routing/ingress → guest service → Docker published port → Nginx content.
+Connection paths:
+
+```text
+SSH:
+SSH client → VM public IP → OCI routing and security rules
+→ VM firewall rules → SSH service (port 22)
+
+HTTP:
+HTTP client (browser or curl) → VM public IP
+→ OCI routing and security rules → VM firewall / Docker forwarding rules
+→ container port 80 → Nginx → HTML content
+```
+
+- **VM public IP:** the destination address, available through Terraform output `application_public_ip`.
+- **Permitted SSH source IP:** supplied through input `ssh_source_cidr`. The SSH ingress rule allows connections from this address to port 22.
+- **HTTP source IP:** the HTTP ingress rule permits any IPv4 source (`0.0.0.0/0`) to port 80.
+- SSH runs directly on the VM; HTTP reaches Nginx through Docker’s published port.
