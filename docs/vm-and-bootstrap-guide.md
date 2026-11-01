@@ -1,6 +1,6 @@
 # VM, networking, and bootstrap reference
 
-This chapter documents the VM implementation, its network dependencies, and the commands for setup and troubleshooting. Source listings below need the existing root/module files and credentials; do not paste duplicate resource blocks into the project.
+This chapter documents the VM implementation, its network dependencies, and the commands for setup and troubleshooting. Source listings below need the existing root/module files and credentials; This is for personal reference and review only.
 
 ## What a VM is
 
