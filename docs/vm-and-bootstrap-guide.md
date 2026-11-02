@@ -305,7 +305,7 @@ Changing your allowed source IP updates an OCI security-list rule. It does not c
 
 ## Bootstrap: install Docker and start Nginx
 
-File: [cloud-init.yaml](../oci-lab/cloud-init.yaml).
+File: [cloud-init.yaml](../oci-lab/cloud-init.yaml). `.yaml` and `.yml` are equivalent YAML filename extensions. This project uses `.yaml`, matching the filename referenced by Terraform.
 
 ```yaml
 #cloud-config
@@ -383,37 +383,58 @@ This plans the whole root, not only the VM. `-target` is not a routine way to ig
 
 ## Connect and verify
 
-On the Mac, from `oci-lab`:
+On the SSH client, from `oci-lab`:
 
 ```bash
 VM_IP=$(terraform output -raw application_public_ip)
 ssh -i ~/.ssh/oci_learning -o IdentitiesOnly=yes "ubuntu@$VM_IP"
 ```
 
-`-raw` returns a string without Terraform's display quotes. `$(...)` captures command output. SSH `-i` selects the private key; `-o` sets an SSH configuration option. `ubuntu` is this image's login user, not a universal cloud username.
+`-raw` returns the IP without Terraform's display quotes, and `$(...)` stores the command's output in `VM_IP`. SSH uses `-i` to select the private key. `-o` sets an SSH option; `IdentitiesOnly=yes` limits authentication to configured identities instead of trying every key offered by an SSH agent. `ubuntu` is the login user for this Ubuntu image.
 
-On the VM:
+On the VM, check the login user and CPU architecture:
 
 ```bash
 whoami
 uname -m
+```
+
+The expected results are `ubuntu` and `x86_64`.
+
+Check memory and disk space:
+
+```bash
 free -h
 df -h /
+```
+
+`-h` displays sizes in readable units. `df -h /` shows disk usage for the filesystem containing `/`; `free -h` shows memory usage. In the memory output:
+
+- `free` is RAM currently unused.
+- `buff/cache` includes RAM used for buffers and caches, some of which can be reclaimed.
+- `available` estimates how much RAM new work can use without swapping. This can be much larger than `free` because Linux can reclaim cache.
+- `Mi` means mebibytes: one MiB is 1,048,576 bytes.
+
+In the lab, `78Mi` free and `522Mi` available did not mean only 78 MiB remained usable. The available figure included memory Linux could reclaim.
+
+Check that bootstrap has finished and the web service is running:
+
+```bash
 sudo cloud-init status --wait
 sudo systemctl status docker --no-pager
 sudo docker ps
 curl -i http://localhost
 ```
 
-Expected: Ubuntu user, x86_64 architecture, cloud-init done, running `learning-web`, and HTTP 200 with our HTML. `curl -i` includes HTTP response headers; it is unrelated to SSH's `-i`. Exit SSH with `exit`.
+`--wait` waits for cloud-init to finish. `--no-pager` prints Docker's service status directly without opening a scrollable viewer. `docker ps` lists running containers. `curl -i` includes HTTP response headers; here, `localhost` tests the web service from inside the VM. Expect cloud-init status `done`, the running `learning-web` container, and HTTP 200 with the project's HTML.
 
-Then on the Mac:
+Leave the SSH session with `exit`, then test from the client:
 
 ```bash
 curl -i "http://$VM_IP"
 ```
 
-A successful local curl plus failed external curl suggests investigating networking/public addressing/host filtering rather than assuming the HTML or Nginx is broken.
+This request uses the public network path. If the request inside the VM works but this one fails, check public addressing, routing, and firewall rules.
 
 ## Troubleshooting commands
 
@@ -442,6 +463,14 @@ ssh -v -o ConnectTimeout=10 -i ~/.ssh/oci_learning \
 ```
 
 A timeout suggests reachability/filtering; `Permission denied (publickey)` suggests username/key authorization. Host-key mismatch is another distinct issue. Verify unexpected identity changes rather than automatically deleting the host record.
+
+SSH stores previously accepted server keys in the client's `~/.ssh/known_hosts`. One server can have entries for several key algorithms. After an intentional VM replacement, remove an obsolete host entry using the old IP:
+
+```bash
+ssh-keygen -R OLD_VM_IP
+```
+
+Replace `OLD_VM_IP` with the actual old address. This removes the saved server identity, not the private login key. For an unexpected host-key change, verify the server's identity before accepting a new key.
 
 ## VM replacement exercise — destructive example, not routine maintenance
 
