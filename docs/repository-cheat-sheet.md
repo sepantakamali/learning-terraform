@@ -1,6 +1,6 @@
 # Repository cheat sheet
 
-Paths and commands below are relative to the repository root unless stated otherwise. Choose the intended root before running Terraform.
+Paths and commands are relative to the repository root unless stated otherwise. Choose the intended root before running Terraform.
 
 ## Where things live
 
