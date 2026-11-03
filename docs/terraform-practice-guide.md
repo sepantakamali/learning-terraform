@@ -284,21 +284,21 @@ git status --short
 
 **Why:** CI should not use the human administrator's credentials. PEM is a text encoding/container format for cryptographic material. An unattended process needs access to its key without a human entering a passphrase; that increases the importance of scoped permissions, protected secret access, rotation, and temporary files. A console password and an API-signing key are separate credentials.
 
-The restricted identity can update the existing dev compartment, read foundation state, and handle dev state/lock objects. It is not intended to create arbitrary infrastructure or manage prod. Reading a remote-state output requires access to the underlying state snapshot; output selection is not an access-control boundary.
+The restricted identity can update the existing dev compartment, read foundation state, and handle dev state/lock objects. It is not intended to create arbitrary infrastructure or manage prod. Reading a remote-state output requires access to the underlying state snapshot.
 
 The workflow selects `GITHUB_TERRAFORM_DEV`. The OCI provider uses `OCI_CONFIG_FILE_PROFILE`; the backend selection uses `OCI_config_file_profile`. GitHub env mappings rejected both case variants together, so the lowercase form is assigned immediately before shell commands that need it. Local OCI-lab work uses `LEARNING_TERRAFORM`.
 
 ## 14. Approved saved-plan deployment
 
-**Practice:** manually dispatch the main-branch workflow, approve plan access, inspect the plan, approve apply, then change only development's description through a PR and the workflow. This exercised both a no-change run and deployment of an actual description update.
+**Practice:** manually dispatch the main-branch workflow, approve plan access, inspect the plan, approve apply, then change the development compartment’s description through a PR, then deploy that change using the Terraform development workflow. This exercised both a no-change run and deployment of an actual description update.
 
-**Why:** the apply job consumes the exact saved plan instead of generating a different unreviewed plan. Both jobs use the protected development environment, giving two approval gates. GitHub calls these deployments even when the first job only plans.
+**Why:** the apply job consumes the exact saved plan instead of generating a different unreviewed plan. Both jobs use the protected development environment, giving two approval gates.
 
 Each job has a separate hosted runner. The plan job writes `dev.tfplan`, encrypts it with GPG and `TF_PLAN_PASSWORD`, uploads only `dev.tfplan.gpg`, and removes local files. The apply job checks out the workflow commit, initializes matching providers, downloads, decrypts, and applies the plan. The artifact expires after three days. Rerun all jobs with this implementation because artifact names include `github.run_attempt`.
 
-Encryption protects the stored artifact's contents, not a compromised runner that has both plaintext and the password. Terraform must access plaintext during creation/application. Secrets marked sensitive can still be present in saved plans/state; hiding console output is not encryption.
+Encryption protects the stored artifact's contents. Terraform must access plaintext during creation/application. Secrets marked sensitive can still be present in saved plans/state; hiding console output is not encryption.
 
-`checkout` obtains repository files; its GitHub token is separate from OCI credentials. `persist-credentials: false` avoids persisting checkout authentication for later Git commands. `terraform_wrapper: false` disables setup-terraform's output-capturing wrapper. `-no-color` removes ANSI formatting. `needs: plan` orders jobs; it does not itself grant approval.
+`checkout` obtains repository files; its GitHub token is separate from OCI credentials. `persist-credentials: false` avoids persisting checkout authentication for later Git commands. `terraform_wrapper: false` disables setup-terraform's output-capturing wrapper. `-no-color` removes ANSI formatting. `needs: plan` orders jobs.
 
 File permissions: the plan-creation step does not yet set `umask 077`; encryption and decryption steps do. Adding it before plan creation would also restrict the initial plaintext file permissions.
 
@@ -310,11 +310,11 @@ For one accidentally forgotten resource, a reviewed import is often more focused
 
 ## 15. Optional owner tags and module tests
 
-The compartment module accepts an optional `owner` string. Omitted or null means no owner tag; any nonblank string is accepted and preserved; an empty or whitespace-only string fails validation. `platform-team` is the development caller's value, not a required literal.
+The compartment module accepts an optional `owner` string. Omitted or null means no owner tag; any nonblank string is accepted and preserved; an empty or whitespace-only string fails validation. `platform-team` is the development caller's value.
 
-The checked-in suite has two naming tests and three owner tests: supplied, omitted, and invalid whitespace. With `mock_provider "oci" {}`, a test's `command = apply` uses mock operations rather than creating a cloud compartment.
+The repository's test suite has two naming tests and three owner tests: supplied, omitted, and invalid whitespace. With `mock_provider "oci" {}`, a test's `command = apply` uses mock operations rather than creating a cloud compartment.
 
-**Problem encountered:** changing the omitted-owner test to `command = plan` produced `Unknown condition value`. The module passes null for the optional/computed tag map, so its result can be unknown during planning. Mock apply resolves that value. Test absence with a key-presence assertion after resolution; `try` catches expression errors but cannot turn an unknown value into a known one.
+**Problem encountered:** changing the omitted-owner test to `command = plan` produced `Unknown condition value`. The module passes null for the computed tag map, so its result can be unknown during planning. Mock apply resolves that value. When testing an omitted owner, check that `freeform_tags` contains no `owner` key. In this test, the tags are unknown during planning, so use a mocked apply before checking them.
 
 ```bash
 # From the repository root:
@@ -338,7 +338,7 @@ The owner change produced a dev plan adding only the tag and a prod plan with no
 | State lock | Temporary exclusive access to a particular Terraform state during an operation. |
 | Provider lockfile | `.terraform.lock.hcl`: selected provider versions and checksums; unrelated to the temporary state lock. |
 
-An AD has separate power, cooling, and internal networking from other ADs in its region. Placing one VM in an AD does not make the application highly available. [OCI regions and availability domains](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)
+An AD has separate power, cooling, and internal networking from other ADs in its region. [OCI regions and availability domains](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)
 
 ## Official references
 
