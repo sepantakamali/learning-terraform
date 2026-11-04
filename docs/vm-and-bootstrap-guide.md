@@ -1,12 +1,12 @@
 # VM, networking, and bootstrap reference
 
-This chapter documents the VM implementation, its network dependencies, and the commands for setup and troubleshooting. Source listings below need the existing root/module files and credentials; This is for personal reference and review only.
+This chapter documents the VM implementation, its network dependencies, and the commands for setup and troubleshooting. 
 
 ## What a VM is
 
 A virtual machine (VM) is a virtual computer with allocated CPU, memory, network interfaces, and disks, running its own operating-system kernel. The cloud provider operates the physical hardware and virtualization layer. You manage the guest OS and applications.
 
-Our VM runs Ubuntu. Docker runs on Ubuntu, and the Nginx container runs through Docker. Containers share the host Linux kernel; they are not additional full VMs. Nginx serves our HTML page; Docker supplies container execution and isolation, not HTTP application behavior.
+Our VM runs Ubuntu. Docker runs on Ubuntu, and the Nginx container runs through Docker. Containers share the host Linux kernel. Nginx serves our HTML page; Docker supplies container execution and isolation.
 
 ```text
 OCI physical infrastructure
@@ -28,11 +28,11 @@ OCI physical infrastructure
 | Shape | Virtual hardware allocation; E2.1.Micro is the selected fixed shape |
 | Image | OS boot template; the chosen Ubuntu image must support x86 and the shape |
 | Boot volume | Persistent virtual disk used for the OS and local files; configured as 50 GiB |
-| VNIC | Virtual network interface attached to the subnet |
-| Private IP | Address within the VCN, used for private routing |
+| VNIC | (Virtual Network Interface Card) Virtual network interface attached to the subnet |
+| Private IP | Address within the VCN (Virtual Cloud Network), used for private routing |
 | Public IP | Internet-facing address associated with the VNIC; alone it does not open ports |
 | Metadata | Includes the SSH public key and cloud-init user data |
-| Tags | Classification labels; they do not allocate hardware or grant access |
+| Tags | Classification labels; used for clarification and labeling |
 
 Earlier we explored A1.Flex, an Arm shape, and configurable CPU/memory. The final E2.1.Micro module does not contain a `shape_config` block. Do not copy flexible-shape memory settings into this fixed-shape definition. Capacity, compatibility, limits, and authorization are different failure categories. Our historical 404/shape errors did not prove a single cause for all failed attempts.
 
