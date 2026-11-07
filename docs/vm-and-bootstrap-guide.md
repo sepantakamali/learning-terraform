@@ -1,6 +1,6 @@
 # VM, networking, and bootstrap reference
 
-This chapter documents the VM implementation, its network dependencies, and the commands for setup and troubleshooting. 
+This chapter documents the VM implementation, its network dependencies, and the commands for setup and troubleshooting.
 
 ## What a VM is
 
@@ -12,8 +12,8 @@ Our VM runs Ubuntu. Docker runs on Ubuntu, and the Nginx container runs through 
 OCI physical infrastructure
 └── virtual machine: learning-application-vm
     ├── Ubuntu operating system
-    ├── boot volume: OS and /opt/learning-app/index.html
-    ├── virtual network interface in application subnet
+    ├── boot volume: stores Ubuntu, installed software, and website files
+    ├── VNIC: network adapter connecting the VM to the application subnet
     └── Docker service
         └── learning-web container: Nginx
             └── /usr/share/nginx/html → host /opt/learning-app (read-only)
@@ -28,9 +28,9 @@ OCI physical infrastructure
 | Shape | Virtual hardware allocation; E2.1.Micro is the selected fixed shape |
 | Image | OS boot template; the chosen Ubuntu image must support x86 and the shape |
 | Boot volume | Persistent virtual disk used for the OS and local files; configured as 50 GiB |
-| VNIC | (Virtual Network Interface Card) Virtual network interface attached to the subnet |
-| Private IP | Address within the VCN (Virtual Cloud Network), used for private routing |
-| Public IP | Internet-facing address associated with the VNIC; alone it does not open ports |
+| VNIC | Virtual Network Interface Card: adapter attached to the VM and connected to a subnet; Ubuntu uses it through a network driver |
+| Private IP | Address allocated from the subnet to the VNIC |
+| Public IP | Internet-facing address associated with a private IP on the VNIC; routing and security rules are also required |
 | Metadata | Includes the SSH public key and cloud-init user data |
 | Tags | Classification labels; used for clarification and labeling |
 
@@ -194,12 +194,33 @@ The child exports its IPs. The root republishes them as `application_public_ip` 
 
 ## Network path and exact configuration
 
+| Component | Role in our network |
+|---|---|
+| VCN (Virtual Cloud Network) | Private network with the address range `10.0.0.0/16` |
+| Subnet | A section of the VCN using `10.0.1.0/24`; multiple VNICs can connect with distinct private IPs |
+| Internet gateway | Shared internet connection for the VCN; performs public/private IPv4 translation for instances using public IPs |
+| Route table | Separate OCI resource associated with our subnet; selects the next destination for traffic |
+| Security list | Associated with the subnet; permits or blocks traffic according to protocol, addresses, and ports |
+
+We create the VCN first. The gateway, route table, and security list reference it; the route table also references the gateway. The subnet references the VCN, route table, and security list. During VM creation, `create_vnic_details` selects that subnet, creates the primary VNIC, and requests a public IP. OCI allocates a private IP from the subnet and associates the public IP with it. Independent resources can be created in parallel.
+
+The VNIC and internet gateway provide virtual networking-device functions implemented by OCI. Ubuntu sees the VNIC as an interface such as `ens3`. Ubuntu's networking software manages TCP connections and delivers traffic to applications using ports.
+
+In our route rule, `destination = "0.0.0.0/0"` matches all IPv4 destinations, while `network_entity_id` separately selects the internet gateway. More-specific routes take precedence, including local VCN routing. This rule chooses a path; it does not grant permission or assign an IP to the gateway. Our route table is associated with the subnet, not configured inside the gateway.
+
+For incoming internet traffic, the gateway translates the public destination IP to its associated private IP. The VNIC delivers the traffic to Ubuntu. These are simplified paths; security rules must also permit the traffic:
+
 ```text
-Mac → VM public IP:22 → OCI ingress rule → subnet/VNIC → Ubuntu SSH server
-Browser → VM public IP:80 → OCI ingress rule → host port 80 → container port 80 → Nginx
+SSH client → public IP:22 → internet gateway / address translation
+           → VNIC → Ubuntu SSH service
+
+Browser → public IP:80 → internet gateway / address translation
+        → VNIC → Ubuntu / Docker port mapping → container port 80 → Nginx
 ```
 
-The subnet references its route table and security list. The default route points at an internet gateway. HTTP ingress permits TCP 80 from everywhere for this lab; SSH permits TCP 22 only from `ssh_source_cidr`. Stateless is false, so these rules are stateful. Host-level firewall policy can also affect traffic.
+HTTP ingress permits TCP 80 from any IPv4 source; SSH permits TCP 22 only from `ssh_source_cidr`. `stateless = false` makes the rules stateful: matching return traffic is allowed without a separate return rule. This tracks traffic for filtering; Ubuntu's TCP implementation manages the connection. Host firewall rules can also affect reachability.
+
+See Oracle's [networking FAQ](https://www.oracle.com/cloud/networking/virtual-cloud-network/faq/) for address translation and [internet gateway documentation](https://docs.oracle.com/en-us/iaas/Content/Network/Tasks/managingIGs.htm) for routing.
 
 File: [network.tf](../oci-lab/network.tf). This also declares the parent learning compartment and root networking outputs.
 
@@ -338,7 +359,7 @@ runcmd:
 
 `#cloud-config` identifies the user-data format. Package setup refreshes package metadata and installs Docker; `write_files` creates the HTML file; `runcmd` arranges commands run in the final stage. This bootstrap is intended for initial instance setup, not arbitrary repeated application deployments. Changing the local YAML does not by itself rerun it on an existing VM. [Cloud-init module reference](https://docs.cloud-init.io/en/latest/reference/modules.html)
 
-`/opt` conventionally holds additional application software/data. `/opt/learning-app` is our chosen host directory, not a special Docker object. `/usr/share/nginx/html` is the web-content path inside this container. The mount connects them; one is not the parent directory of the other.
+`/opt/learning-app` is a directory on the Ubuntu VM, created by cloud-init for our website files. `learning-web` is the container. `/usr/share/nginx/html` is a directory inside that container, not a script. The bind mount exposes the VM directory there without copying the files. Nginx reads `index.html` and sends it to the browser, which renders the HTML. `:ro` prevents changes through the container mount; the files can still be edited on the VM.
 
 The Docker command, split across lines for explanation:
 
@@ -455,7 +476,7 @@ ls -l /opt/learning-app/index.html
 
 `docker ps -a` includes stopped containers; `logs` reads container output; `inspect` shows configuration; `nginx -t` checks Nginx configuration. `ss -lntp` displays listening TCP sockets and processes, but Docker forwarding need not always appear as a normal user-process listener. Inspect port mappings and connectivity as well. Logs and inspection output can contain operational details; review before sharing.
 
-On the Mac, diagnose SSH connection establishment:
+On the SSH client, diagnose SSH connection establishment:
 
 ```bash
 ssh -v -o ConnectTimeout=10 -i ~/.ssh/oci_learning \
@@ -487,7 +508,7 @@ terraform show rebuild.tfplan
 terraform apply rebuild.tfplan
 ```
 
-Retrieve the new IP through outputs, reconnect, and verify cloud-init/Docker/HTTP again. If a recorded host identity genuinely became obsolete, remove that known-host record with `ssh-keygen -R OLD_IP` after replacing the placeholder. This removes server-key records, not your private identity key. Multiple matching lines can be different server-key algorithms.
+Retrieve the new IP through outputs, reconnect, and verify cloud-init/Docker/HTTP again. For obsolete SSH host records, follow the procedure in [Troubleshooting commands](#troubleshooting-commands).
 
 ## What Terraform can and cannot verify here
 
