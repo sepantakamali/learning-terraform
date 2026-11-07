@@ -93,7 +93,7 @@ Development and production use the same bucket but separate state objects:
 | `environment-lab/dev` | `environment-lab/dev/terraform.tfstate` | `learning-env-dev` |
 | `environment-lab/prod` | `environment-lab/prod/terraform.tfstate` | `learning-env-prod` |
 
-The backend key selects the state, not the directory name. Each state associates the same Terraform resource address with a different compartment OCID. If both directories used the same bucket and key, they would share one state.
+The backend key selects the state, not the directory name. Both roots call the module `compartment`, whose resource is also labelled `compartment`. Each state therefore contains the address `module.compartment.oci_identity_compartment.compartment`, but associates it with its own compartment OCID. If both directories used the same bucket and key, they would share one state.
 
 **Promotion** means testing a configuration change in development, then applying that change to production's own resources. For example:
 
@@ -169,7 +169,7 @@ For this OCI backend, Terraform attempts to create an object named after the sta
 
 The lock coordinates Terraform operations on that state. It does not stop the VM, block console edits, or lock other environment state keys.
 
-GitHub workflow concurrency is a separate scheduling control. 
+GitHub workflow concurrency is a separate scheduling control.
 
 A lock left by an interrupted process requires checking that the original operation has stopped before considering `force-unlock`.
 
@@ -284,13 +284,13 @@ git status --short
 
 **Why:** CI should not use the human administrator's credentials. PEM is a text encoding/container format for cryptographic material. An unattended process needs access to its key without a human entering a passphrase; that increases the importance of scoped permissions, protected secret access, rotation, and temporary files. A console password and an API-signing key are separate credentials.
 
-The restricted identity can update the existing dev compartment, read foundation state, and handle dev state/lock objects. It is not intended to create arbitrary infrastructure or manage prod. Reading a remote-state output requires access to the underlying state snapshot.
+The restricted identity can update the existing dev compartment, read foundation state, and handle dev state/lock objects. It is not intended to create arbitrary infrastructure or manage prod. Reading a remote-state output requires permission to read the entire state snapshot. Selecting one output does not prevent that identity from reading the other state contents.
 
 The workflow selects `GITHUB_TERRAFORM_DEV`. The OCI provider uses `OCI_CONFIG_FILE_PROFILE`; the backend selection uses `OCI_config_file_profile`. GitHub env mappings rejected both case variants together, so the lowercase form is assigned immediately before shell commands that need it. Local OCI-lab work uses `LEARNING_TERRAFORM`.
 
 ## 14. Approved saved-plan deployment
 
-**Practice:** manually dispatch the main-branch workflow, approve plan access, inspect the plan, approve apply, then change the development compartment’s description through a PR, then deploy that change using the Terraform development workflow. This exercised both a no-change run and deployment of an actual description update.
+**Practice:** manually dispatch the main-branch workflow, approve plan access, inspect the plan, approve apply, then repeat the process after merging a PR that changes the development compartment’s description. This exercised both a no-change run and deployment of an actual description update.
 
 **Why:** the apply job consumes the exact saved plan instead of generating a different unreviewed plan. Both jobs use the protected development environment, giving two approval gates.
 
@@ -333,7 +333,7 @@ The owner change produced a dev plan adding only the tag and a prod plan with no
 | AD — Availability Domain | One or more isolated data centres within an OCI region; determines VM placement. It is separate from a compartment or a dev/prod environment. |
 | OCID | Oracle's identifier for a cloud resource. |
 | Object key | An object's name within a bucket, such as `environment-lab/dev/terraform.tfstate`; it is not an OCID. |
-| Reference example | A code example to look up and adapt later. Expanded examples are labelled separately from checked-in implementation. |
+| Reference example | A code example to look up and adapt later. Expanded examples are labelled separately from the repository implementation. |
 | Terraform reference | An expression such as `oci_core_subnet.application.id` that reads another value and can establish a dependency. |
 | State lock | Temporary exclusive access to a particular Terraform state during an operation. |
 | Provider lockfile | `.terraform.lock.hcl`: selected provider versions and checksums; unrelated to the temporary state lock. |

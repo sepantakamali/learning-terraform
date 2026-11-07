@@ -80,7 +80,7 @@ terraform -chdir=environment-lab/modules/compartment init -backend=false -input=
 terraform -chdir=environment-lab/modules/compartment test
 ```
 
-The tests declare `mock_provider "oci" {}`. Their apply runs use mocked operations and do not create real OCI resources. The actual suite contains five tests: two naming tests and three owner-input tests. The cheat sheet also includes an optional six-case owner test example to adapt; the checked-in owner test file contains three cases.
+The tests declare `mock_provider "oci" {}`. Their apply runs use mocked operations and do not create real OCI resources. The actual suite contains five tests: two naming tests and three owner-input tests. The cheat sheet also includes an optional six-case owner test example to adapt; the repository's owner test file contains three cases.
 
 ## Running against OCI
 
@@ -102,7 +102,7 @@ ssh_public_key_path = "~/.ssh/YOUR_PUBLIC_KEY.pub"
 ubuntu_image_id     = "YOUR_COMPATIBLE_UBUNTU_X86_IMAGE_OCID"
 ```
 
-Initialize the chosen backend, review a plan, and apply only intended changes. Dev and prod read the foundation's compartment output, so foundation state must exist first. The remote state bucket and access policies are prerequisites. For this repository's GitHub deployment exercise, apply dev changes through the workflow rather than also applying them locally. Push the changes to a branch, open a pull request, and merge after the required checks pass. This updates the code on `main`. Then manually start the development workflow, review the plan, and approve its application to update OCI. 
+Initialize the chosen backend, review a plan, and apply only intended changes. Dev and prod read the foundation's compartment output, so foundation state must exist first. The remote state bucket and access policies are prerequisites. For this repository's GitHub deployment exercise, apply dev changes through the workflow rather than also applying them locally. Push the changes to a branch, open a pull request, and merge after the required checks pass. This updates the code on `main`. Then manually start the development workflow, review the plan, and approve its application to update OCI.
 
 ## Approved development workflow
 
@@ -121,7 +121,7 @@ The workflow uses two fresh runners. It encrypts the plan before uploading an ar
 
 - **Check configuration:** run the checks above before committing. Mock tests exercise module logic; a real plan checks the proposed changes against OCI.
 - **Update SSH access:** if the local public IP changes, update `ssh_source_cidr` in `oci-lab/terraform.tfvars`, review a saved plan, and apply it. Editing the variable file alone leaves the live rule unchanged. HTTP and SSH have separate ingress rules, so the webpage can work while SSH times out.
-- **Verify the VM:** connect with SSH, run `sudo cloud-init status --wait` (waits for cloud-init to finish; useful after creating or booting the VM.” It can also be run later) and `sudo docker ps`, then check `curl -i http://localhost`. See the [VM guide](docs/vm-and-bootstrap-guide.md#connect-and-verify) for commands.
+- **Verify the VM:** connect with SSH, run `sudo cloud-init status --wait` (waits for bootstrap to finish) and `sudo docker ps`, then check `curl -i http://localhost`. See the [VM guide](docs/vm-and-bootstrap-guide.md#connect-and-verify) for commands.
 - **Change development:** use the reviewed workflow above. Production has a separate state and is applied separately.
 - **Refactor or recover a resource binding:** use the cheat sheet's `moved`, import, and removal procedures. These operations have different effects on state and cloud resources.
 

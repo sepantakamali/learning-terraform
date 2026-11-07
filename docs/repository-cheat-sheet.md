@@ -6,7 +6,7 @@ Paths and commands are relative to the repository root unless stated otherwise. 
 
 | Path | Purpose |
 |---|---|
-| `oci-lab/` | Foundation: contains learning root compartment, network, and VM infrastructure and collection/import exercises |
+| `oci-lab/` | Foundation: contains the learning compartment beneath the tenancy root, network, and VM infrastructure and collection/import exercises |
 | `oci-lab/network.tf` | OCI network and compartment |
 | `oci-lab/compute.tf` | Calls the web_server module to configure the VM; contains address migrations and IP outputs. |
 | `oci-lab/cloud-init.yaml` | VM's initial Docker/Nginx setup |
@@ -17,17 +17,17 @@ Paths and commands are relative to the repository root unless stated otherwise. 
 | `environment-lab/prod/` | Production root and its separate remote state |
 | `environment-lab/*/dependencies.tf` | Reads foundation state outputs |
 | `environment-lab/modules/compartment/main.tf` | Shared compartment resource, variables, output |
-| `environment-lab/modules/compartment/tests/` | Mock-provider naming tests |
+| `environment-lab/modules/compartment/tests/` | Mock-provider naming and owner-input tests |
 | `.github/workflows/terraform.yml` | Formatting, initialization, validation, mock tests |
 | `.github/workflows/terraform-dev.yml` | Manual authenticated plan and approved apply |
 
-The three working roots use separate state keys in `learning-terraform-state` (the bucket state).
+The three working roots use separate state keys in `learning-terraform-state` (the state bucket).
 
 ## Routine local checks
 
 ```bash
 # Only checks, doesn't apply anything
-terraform fmt -check -diff -recursive 
+terraform fmt -check -diff -recursive
 # To fix formatting deliberately:
 terraform fmt -recursive
 
@@ -49,7 +49,7 @@ terraform state list
 terraform output
 ```
 
-`terraform -chdir=oci-lab plan` is equivalent to temporarily changing directory (of terraform, shell directory stays the same) and running plan there and returning to shell directory. The saved-plan path is relative to that Terraform working directory (the child directory). always generate a fresh plan after changes, `terraform plan` is useful to check the status, be aware of the directory.
+`terraform -chdir=oci-lab plan` runs Terraform in `oci-lab` without changing the shell's current directory. Saved-plan paths are relative to that Terraform working directory. Generate and review a fresh plan after changing configuration or inputs.
 
 ## Identity selection for local work
 
@@ -76,7 +76,7 @@ Never commit private keys, credential files, state, variable files containing se
 | Prevent configured resources from destruction | `prevent_destroy`; not a permanent cloud-side guard |
 | Select a different environment | move to its root directory or select its backend state key |
 
-State changes can matter even when the summary reports zero infrastructure additions, changes, and destruction. State is not a history, it is the latest known state of the infrastructure (resource bindings and the attributes) based on latest Terraform persist. Planning reads current infrastructure to calculate proposed changes. The directory and state matter in the correctness of the report.
+State changes can matter even when the summary reports zero infrastructure additions, changes, and destruction. State records resource bindings and attributes from the last saved state update; it is not an operation history. Planning reads current infrastructure to calculate proposed changes. The directory and state matter in the correctness of the report.
 
 ## Provider maintenance
 
@@ -112,10 +112,11 @@ gh pr checks --watch
 gh pr diff
 # Once reviewed and required checks pass:
 gh pr merge --merge --delete-branch
-gh pr merge --auto --merge --delete-branch # Wait for merge requirements.
+# Alternative to the command above: wait for merge requirements.
+# gh pr merge --auto --merge --delete-branch
 ```
 
-`q` exits the diff pager. `--ff-only` refuses divergent-history merges. `--` separates paths from revision/options in commands such as `git diff -- file`. `??` is untracked; `M` is modified. `--auto` requests merging after requirements pass if supported; `--admin` bypasses protections and is not the normal fix for blocked checks.
+`q` exits the diff pager. `--ff-only` stops if local and remote branches each contain commits the other lacks. `--` separates paths from revision/options in commands such as `git diff -- file`. `??` is untracked; `M` is modified. `--auto` requests merging after requirements pass if supported; `--admin` bypasses protections and is not the normal fix for blocked checks.
 
 ## Deploy development through GitHub
 
@@ -306,7 +307,7 @@ gh run view RUN_ID --json status,jobs
 gh run view RUN_ID --log-failed
 ```
 
-Substitute with actual IDs and branch. Compare local, remote-branch, and PR commit IDs. Our earlier stale PR head resolved after GitHub updated its metadata. In another incident all step timestamps showed quick completion despite stale job status; rerunning the check allowed the PR to merge. Check the current PR commit and individual check results before deciding how to resolve a blocked merge.
+Substitute with actual IDs and branch. Compare local, remote-branch, and PR commit IDs. PR #9 initially reported an older commit than the remote branch; a later query reported the current commit. PR #10 had a long-pending check that succeeded after rerunning. We did not establish the cause of either delay. Check the current PR commit and individual check results before deciding how to resolve a blocked merge.
 
 
 ## Module test design: optional owner input
@@ -478,7 +479,7 @@ Stage the caller and module implementation together, along with tests and intend
 
 Full code and explanations: [VM and bootstrap guide](vm-and-bootstrap-guide.md).
 
-On the Mac, from `oci-lab`:
+On the SSH client, from `oci-lab`:
 
 ```bash
 terraform output application_public_ip
