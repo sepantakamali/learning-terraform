@@ -357,10 +357,15 @@ runcmd:
   - docker run -d --name learning-web --restart unless-stopped -p 80:80 -v /opt/learning-app:/usr/share/nginx/html:ro nginx:stable-alpine
 ```
 
-`#cloud-config` identifies the user-data format (cloud-init configuration for linux with declarative code). Package setup refreshes package metadata and installs Docker; `write_files` creates the HTML file; `runcmd` arranges commands run in the final stage. This bootstrap is intended for initial instance setup, not arbitrary repeated application deployments. Changing the local YAML does not by itself rerun it on an existing VM. [Cloud-init module reference](https://docs.cloud-init.io/en/latest/reference/modules.html)
-nginx is installed if does not already exist in the container. Adding it to `packages:` would install it on `Ubuntu` which might cause conflict if they both try to use VM's port 80. 
+`#cloud-config` identifies the user data as cloud-init configuration written in YAML. Package setup (package_update) refreshes package metadata and installs Docker; `write_files` creates the HTML file; `runcmd` supplies commands executed in the final stage. Terraform sends the entire configuration as user data, and cloud-init inside Ubuntu processes it. Our bootstrap is intended for initial instance setup. An ordinary reboot does not repeat this.
 
-`/opt/learning-app` is a directory on the Ubuntu VM, created by cloud-init for our website files. `learning-web` is the container. `/usr/share/nginx/html` is a directory inside that container, not a script. The bind mount exposes the VM directory there without copying the files. Nginx reads `index.html` and sends it to the browser, which renders the HTML. `:ro` prevents changes through the container mount; the files can still be edited on the VM.
+Terraform detects edits to this file because `file("${path.module}/cloud-init.yaml")` reads its contents and `base64encode(var.cloud_init)` supplies them as `metadata.user_data`. In the OCI provider version locked for `oci-lab` (9.2.0), `ForceNewIfChange("metadata", ...)` compares the old and new `user_data` values and requires instance replacement if they differ. See the [provider's replacement rule](https://github.com/oracle/terraform-provider-oci/blob/v9.2.0/internal/service/core/core_instance_resource.go#L1025).
+
+Therefore, after editing the YAML, `terraform plan` proposes replacing `module.web_server.oci_core_instance.web`: destroying the old VM and creating a new one. With no other changes, the summary is `1 to add, 0 to change, 1 to destroy`.
+
+Nginx is already installed as part of the docker image. Docker downloads that image if it is not available locally and creates a container from it. Adding `nginx` to `packages:` would instead install a separate Nginx service directly on Ubuntu, which could conflict with Docker's published port if both try to use the VM's port 80.
+
+`/opt/learning-app` is a directory on the Ubuntu VM, created by cloud-init for our website files. `learning-web` is the container. `/usr/share/nginx/html` is a directory (where the static files are stored) inside that container. The bind mount exposes the VM directory there without copying the files. Nginx reads `index.html` and sends it to the browser, which renders the HTML. `:ro` prevents changes through the container mount; the files can still be edited on the VM.
 
 The Docker command, split across lines for explanation:
 
@@ -373,7 +378,7 @@ sudo docker run -d \
   nginx:stable-alpine
 ```
 
-This creates a container: do not run it again if `learning-web` already exists. Inspect or start the existing container instead.
+This creates a container, do not run it again if `learning-web` already exists. Inspect or start the existing container instead.
 
 | Part | Meaning |
 |---|---|
@@ -382,9 +387,9 @@ This creates a container: do not run it again if `learning-web` already exists. 
 | `--restart unless-stopped` | Restart according to this policy, respecting explicit stops |
 | `-p 80:80` | Publish host port 80 to container port 80 |
 | `-v host:container:ro` | Bind the host directory into the container read-only |
-| `nginx:stable-alpine` | Image and tag; the tag can change over time, unlike a pinned digest |
+| `nginx:stable-alpine` | Image and tag |
 
-`systemctl enable --now docker` enables Docker on future boots and starts it immediately. In cloud-init these commands run with root privileges; interactive commands here use sudo. [Docker run reference](https://docs.docker.com/engine/containers/run/)
+`systemctl enable --now docker` enables Docker on future boots and starts it immediately.
 
 ## Create or update deliberately
 
