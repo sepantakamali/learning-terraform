@@ -326,7 +326,7 @@ Changing your allowed source IP updates an OCI security-list rule. It does not c
 
 ## Bootstrap: install Docker and start Nginx
 
-File: [cloud-init.yaml](../oci-lab/cloud-init.yaml). `.yaml` and `.yml` are equivalent YAML filename extensions. This project uses `.yaml`, matching the filename referenced by Terraform.
+File: [cloud-init.yaml](../oci-lab/cloud-init.yaml). `.yaml` and `.yml` are equivalent YAML filename extensions. The cloud-init file uses .yaml, while GitHub Actions workflow files use .yml. Both extensions represent YAML. File references must match the actual filename.
 
 ```yaml
 #cloud-config
@@ -357,7 +357,8 @@ runcmd:
   - docker run -d --name learning-web --restart unless-stopped -p 80:80 -v /opt/learning-app:/usr/share/nginx/html:ro nginx:stable-alpine
 ```
 
-`#cloud-config` identifies the user-data format. Package setup refreshes package metadata and installs Docker; `write_files` creates the HTML file; `runcmd` arranges commands run in the final stage. This bootstrap is intended for initial instance setup, not arbitrary repeated application deployments. Changing the local YAML does not by itself rerun it on an existing VM. [Cloud-init module reference](https://docs.cloud-init.io/en/latest/reference/modules.html)
+`#cloud-config` identifies the user-data format (cloud-init configuration for linux with declarative code). Package setup refreshes package metadata and installs Docker; `write_files` creates the HTML file; `runcmd` arranges commands run in the final stage. This bootstrap is intended for initial instance setup, not arbitrary repeated application deployments. Changing the local YAML does not by itself rerun it on an existing VM. [Cloud-init module reference](https://docs.cloud-init.io/en/latest/reference/modules.html)
+nginx is installed if does not already exist in the container. Adding it to `packages:` would install it on `Ubuntu` which might cause conflict if they both try to use VM's port 80. 
 
 `/opt/learning-app` is a directory on the Ubuntu VM, created by cloud-init for our website files. `learning-web` is the container. `/usr/share/nginx/html` is a directory inside that container, not a script. The bind mount exposes the VM directory there without copying the files. Nginx reads `index.html` and sends it to the browser, which renders the HTML. `:ro` prevents changes through the container mount; the files can still be edited on the VM.
 
