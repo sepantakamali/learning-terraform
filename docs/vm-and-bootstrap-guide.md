@@ -10,13 +10,22 @@ Our VM runs Ubuntu. Docker runs on Ubuntu, and the Nginx container runs through 
 
 ```text
 OCI physical infrastructure
-└── virtual machine: learning-application-vm
-    ├── Ubuntu operating system
-    ├── boot volume: stores Ubuntu, installed software, and website files
-    ├── VNIC: network adapter connecting the VM to the application subnet
-    └── Docker service
-        └── learning-web container: Nginx
-            └── /usr/share/nginx/html → host /opt/learning-app (read-only)
+└── VM: learning-application-vm
+    ├── Boot volume — persistent storage 
+    │   ├── Ubuntu system files and installed Docker software — contains all disk storage used by this VM; no additional block volumes are attached.
+    │   ├── Docker image and container data
+    │   └── Website content: /opt/learning-app/index.html
+    ├── Primary VNIC — connection to the application subnet
+    │   └── Private IP with an associated public IP
+    └── Ubuntu — running guest operating system
+        ├── SSH service — VM port 22
+        └── Docker service — manages containers
+            └── Container: learning-web
+                ├── Image: nginx:stable-alpine
+                ├── Nginx web server — serves HTML over HTTP
+                ├── Published port: VM TCP 80 → container TCP 80
+                └── Content directory: /usr/share/nginx/html
+                    └── Read-only bind mount from VM: /opt/learning-app
 ```
 
 ## VM concepts in the configuration
