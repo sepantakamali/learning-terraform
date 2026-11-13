@@ -30,13 +30,17 @@ flowchart TD
     B --- R
 ```
 
-The state bucket is provisioned separately. Each root uses a different object key (the object name within the bucket, such as `environment-lab/dev/terraform.tfstate`); the backend configuration connects to an existing bucket and does not create it. The remote-state data source exposes root outputs but requires access to the underlying snapshot.
+The state bucket is provisioned separately. Each root uses a different object key (the object name within the bucket, such as `environment-lab/dev/terraform.tfstate`); the backend configuration connects to an existing bucket and does not create it. Reading a remote-state output requires permission to read the entire state snapshot, not just that output.
 
 ## Repository layout
 
 ```text
 main.tf                            Initial local_file exercise only
 oci-lab/                           Foundation infrastructure root
+  main.tf                         Provider, root inputs, availability domains
+  backend.tf                      Remote state location
+  network.tf                      Compartment and networking resources
+  compute.tf                      VM module call and IP outputs
   modules/web_server/              VM module
   cloud-init.yaml                  Automatic Docker/Nginx bootstrap
   collections.tf                  for_each, validation, lifecycle exercises
@@ -51,7 +55,7 @@ environment-lab/
 docs/                             Learning guide and operational reference
 ```
 
-Run Terraform in the intended root. Running it at repository top level executes the original local-file exercise.
+Run Terraform in the intended root. At repository top level, Terraform reads the original local-file exercise rather than the OCI configuration.
 
 ## What this project demonstrates
 
@@ -102,7 +106,7 @@ ssh_public_key_path = "~/.ssh/YOUR_PUBLIC_KEY.pub"
 ubuntu_image_id     = "YOUR_COMPATIBLE_UBUNTU_X86_IMAGE_OCID"
 ```
 
-Initialize the chosen backend, review a plan, and apply only intended changes. Dev and prod read the foundation's compartment output, so foundation state must exist first. The remote state bucket and access policies are prerequisites. For this repository's GitHub deployment exercise, apply dev changes through the workflow rather than also applying them locally. Push the changes to a branch, open a pull request, and merge after the required checks pass. This updates the code on `main`. Then manually start the development workflow, review the plan, and approve its application to update OCI.
+Initialize the chosen backend, review a plan, and apply only intended changes. Dev and prod read the foundation's compartment output, so foundation state must exist first. The remote state bucket and access policies are prerequisites. For this repository's GitHub deployment exercise, apply dev changes through the [approved development workflow](#approved-development-workflow) below.
 
 ## Approved development workflow
 
@@ -122,6 +126,7 @@ The workflow uses two fresh runners. It encrypts the plan before uploading an ar
 - **Check configuration:** run the checks above before committing. Mock tests exercise module logic; a real plan checks the proposed changes against OCI.
 - **Update SSH access:** if the local public IP changes, update `ssh_source_cidr` in `oci-lab/terraform.tfvars`, review a saved plan, and apply it. Editing the variable file alone leaves the live rule unchanged. HTTP and SSH have separate ingress rules, so the webpage can work while SSH times out.
 - **Verify the VM:** connect with SSH, run `sudo cloud-init status --wait` (waits for bootstrap to finish) and `sudo docker ps`, then check `curl -i http://localhost`. See the [VM guide](docs/vm-and-bootstrap-guide.md#connect-and-verify) for commands.
+- **Change bootstrap:** editing `oci-lab/cloud-init.yaml` changes the instance's user data. With this project's OCI provider and configuration, Terraform proposes replacing the VM. Review the replacement and preserve needed files before applying; see the [bootstrap explanation](docs/vm-and-bootstrap-guide.md#bootstrap-install-docker-and-start-nginx).
 - **Change development:** use the reviewed workflow above. Production has a separate state and is applied separately.
 - **Refactor or recover a resource binding:** use the cheat sheet's `moved`, import, and removal procedures. These operations have different effects on state and cloud resources.
 
